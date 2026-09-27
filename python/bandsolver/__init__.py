@@ -34,6 +34,8 @@ __all__ = [
     "JacobianMismatch",
     "JacobianCheck",
     "solve",
+    "factor",
+    "Factorization",
     "newton",
     "fd_jacobian",
     "newton_fd",
@@ -185,6 +187,50 @@ def solve(A, B, D, G, X=None, Y=None, *, pivot: str = "partial", backend: str = 
     dc, status, node, _ = _core.solve(n, nj, A, B, D, G, X, Y, _pivot_code(pivot), backend, _kernel_code(kernel))
     _raise_for(status, node, "solve")
     return dc
+
+
+class Factorization:
+    """A factored block matrix: ``solve(G)`` costs O(nj n^2) instead of a full elimination.
+
+    Create with :func:`factor`. Useful when the same matrix is solved against several
+    right-hand sides (modified Newton, time stepping with a frozen Jacobian).
+    """
+
+    def __init__(self, core, n, nj):
+        self._core, self.n, self.nj = core, n, nj
+
+    @property
+    def backend(self) -> str:
+        return self._core.backend
+
+    def solve(self, G) -> np.ndarray:
+        """Solve ``K dc = G`` (``G`` has shape ``(nj, n)``) and return ``dc``."""
+        G = _as_blocks(G, "G", (self.nj, self.n))
+        dc, status = self._core.solve(G)
+        _raise_for(status, -1, "Factorization.solve")
+        return dc
+
+
+def factor(A, B, D, X=None, Y=None, *, backend: str = "cpp") -> Factorization:
+    """Factor the block matrix (A, B, D and optional X, Y) for repeated solves.
+
+    Raises :class:`SingularBlockError` (with the 0-based ``node``) if a pivot block is
+    singular, :class:`NonFiniteError` for NaN/Inf blocks.
+    """
+    _check_backend(backend)
+    B = _as_blocks(B, "B")
+    if B.ndim != 3 or B.shape[1] != B.shape[2]:
+        raise ValueError(f"B must have shape (nj, n, n), got {B.shape}")
+    nj, n = B.shape[0], B.shape[1]
+    if nj < 3:
+        raise ValueError(f"need at least 3 nodes, got nj={nj}")
+    A = _as_blocks(A, "A", (nj, n, n))
+    D = _as_blocks(D, "D", (nj, n, n))
+    X = None if X is None else _as_blocks(X, "X", (n, n))
+    Y = None if Y is None else _as_blocks(Y, "Y", (n, n))
+    core = _core.Factorization(n, nj, A, B, D, X, Y, backend)
+    _raise_for(core.status, core.fail_node, "factor")
+    return Factorization(core, n, nj)
 
 
 FillResult = Sequence[Optional[np.ndarray]]

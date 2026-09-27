@@ -8,6 +8,7 @@ endfunction()
 
 band_fortran_test(test_kernel bandsolver_f)
 band_fortran_test(test_kernel_fast bandsolver_f)
+band_fortran_test(test_factor bandsolver_f)
 
 if(EXISTS "${BANDSOLVER_LEGACY_DIR}/ZnMn02_v8_MATINV_BAND_L1983-2100.f95")
   message(STATUS "bandsolver: legacy oracle found at ${BANDSOLVER_LEGACY_DIR}; legacy comparison tests enabled")

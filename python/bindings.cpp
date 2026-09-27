@@ -15,6 +15,7 @@
 #include <bandsolver/band.hpp>
 #include <bandsolver/newton.hpp>
 #include <bandsolver/fd.hpp>
+#include <bandsolver/factor.hpp>
 
 #include "bandsolver_f.h"
 
@@ -326,6 +327,61 @@ py::dict check_jacobian(int n, int nj, const py::function& fill, const Arr& c, d
     return r;
 }
 
+// One factorization, from either backend.
+class PyFactorization {
+public:
+    PyFactorization(int n, int nj, const Arr& A, const Arr& B, const Arr& D, const std::optional<Arr>& X,
+                    const std::optional<Arr>& Y, const std::string& backend)
+        : n_(n), nj_(nj), backend_(backend) {
+        if (n < 1 || nj < 3) throw std::invalid_argument("require n >= 1 and nj >= 3");
+        const py::ssize_t nb = static_cast<py::ssize_t>(n) * n * nj;
+        require_size(A, nb, "A"); require_size(B, nb, "B"); require_size(D, nb, "D");
+        const double* xp = opt_ptr(X, static_cast<py::ssize_t>(n) * n, "X");
+        const double* yp = opt_ptr(Y, static_cast<py::ssize_t>(n) * n, "Y");
+        if (backend == "cpp") {
+            bandsolver::SystemView v{n, nj, A.data(), B.data(), D.data(), nullptr, xp, yp};
+            cpp_ = bandsolver::factor(v);
+            status_ = static_cast<int>(cpp_.status());
+            fail_node_ = cpp_.fail_node();
+        } else if (backend == "fortran") {
+            int fnode = 0;
+            status_ = bandsolver_f_factor(n, nj, A.data(), B.data(), D.data(), xp, yp, &handle_, &fnode);
+            fail_node_ = fnode > 0 ? fnode - 1 : -1;
+        } else {
+            throw std::invalid_argument("backend must be 'cpp' or 'fortran'");
+        }
+    }
+    ~PyFactorization() { if (handle_) bandsolver_f_factor_free(handle_); }
+    PyFactorization(const PyFactorization&) = delete;
+    PyFactorization& operator=(const PyFactorization&) = delete;
+
+    py::tuple solve(const Arr& G) const {
+        require_size(G, static_cast<py::ssize_t>(n_) * nj_, "G");
+        Arr dc({static_cast<py::ssize_t>(nj_), static_cast<py::ssize_t>(n_)});
+        int status;
+        {
+            py::gil_scoped_release release;
+            if (backend_ == "cpp")
+                status = static_cast<int>(cpp_.solve(G.data(), dc.mutable_data()).status);
+            else
+                status = bandsolver_f_factor_solve(handle_, G.data(), dc.mutable_data());
+        }
+        return py::make_tuple(dc, status);
+    }
+    int status() const { return status_; }
+    int fail_node() const { return fail_node_; }
+    int n() const { return n_; }
+    int nj() const { return nj_; }
+    const std::string& backend() const { return backend_; }
+
+private:
+    int n_, nj_;
+    std::string backend_;
+    bandsolver::Factorization cpp_;
+    void* handle_ = nullptr;
+    int status_ = 2, fail_node_ = -1;
+};
+
 }  // namespace
 
 PYBIND11_MODULE(_core, m) {
@@ -335,6 +391,17 @@ PYBIND11_MODULE(_core, m) {
     m.def("newton", &newton, py::arg("n"), py::arg("nj"), py::arg("fill"), py::arg("c0"), py::arg("rtol"),
           py::arg("atol"), py::arg("damping"), py::arg("max_iter"), py::arg("pivot"), py::arg("require_convergence"),
           py::arg("backend"), py::arg("kernel") = 0);
+    py::class_<PyFactorization>(m, "Factorization")
+        .def(py::init<int, int, const Arr&, const Arr&, const Arr&, const std::optional<Arr>&,
+                      const std::optional<Arr>&, const std::string&>(),
+             py::arg("n"), py::arg("nj"), py::arg("A"), py::arg("B"), py::arg("D"), py::arg("X"), py::arg("Y"),
+             py::arg("backend"))
+        .def("solve", &PyFactorization::solve, py::arg("G"))
+        .def_property_readonly("status", &PyFactorization::status)
+        .def_property_readonly("fail_node", &PyFactorization::fail_node)
+        .def_property_readonly("n", &PyFactorization::n)
+        .def_property_readonly("nj", &PyFactorization::nj)
+        .def_property_readonly("backend", &PyFactorization::backend);
     m.def("fd_jacobian", &fd_jacobian, py::arg("n"), py::arg("nj"), py::arg("residual"), py::arg("c"),
           py::arg("rel_step"), py::arg("typical"), py::arg("backend"));
     m.def("newton_fd", &newton_fd, py::arg("n"), py::arg("nj"), py::arg("residual"), py::arg("c0"), py::arg("rtol"),

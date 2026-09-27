@@ -67,6 +67,17 @@ int bandsolver_f_newton(int n, int nj, bandsolver_fill_fn fill, void *ctx, doubl
                         const bandsolver_newton_options *opts, bandsolver_newton_result *res,
                         double *update_history, double *step_history, double *residual_history);
 
+/* ---- Factor once, solve many ---------------------------------------------------------- */
+
+/* Factor the block matrix (A, B, D, X, Y; row-major as for bandsolver_f_solve). On return
+ * *handle owns the factorization even on failure; free it with bandsolver_f_factor_free.
+ * fail_node is the 1-based node of a singular block (0 otherwise). */
+int bandsolver_f_factor(int n, int nj, const double *A, const double *B, const double *D,
+                        const double *X, const double *Y, void **handle, int *fail_node);
+/* Solve K dc = G ([nj][n]) with a factorization. */
+int bandsolver_f_factor_solve(void *handle, const double *G, double *dc);
+void bandsolver_f_factor_free(void *handle);
+
 /* ---- Finite-difference Jacobians (see docs/math.md) ---------------------------------- */
 
 /* Residual callback: evaluate F(c) ([nj][n]). Return nonzero to abort. */

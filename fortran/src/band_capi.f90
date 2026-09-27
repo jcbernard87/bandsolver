@@ -5,6 +5,7 @@ module bandsolver_capi
     use bandsolver_kernel
     use bandsolver_newton
     use bandsolver_fd
+    use bandsolver_factor
     implicit none
     private
 
@@ -330,5 +331,68 @@ contains
             cm = c_mismatch(m%error, m%node, m%row, m%col, m%user, m%fd)
         end function cm
     end function bandsolver_f_check_jacobian
+
+    !> Factor the block matrix; returns an opaque handle (free with bandsolver_f_factor_free).
+    integer(c_int) function bandsolver_f_factor(n, nj, A, B, D, X, Y, handle, fail_node) &
+            bind(c, name='bandsolver_f_factor') result(status)
+        integer(c_int), value :: n, nj
+        real(c_double), intent(in) :: A(*), B(*), D(*)
+        type(c_ptr), value :: X, Y
+        type(c_ptr), intent(out) :: handle
+        integer(c_int), intent(out) :: fail_node
+        type(band_factorization), pointer :: f
+        real(c_double), allocatable :: Af(:,:,:), Bf(:,:,:), Df(:,:,:)
+        real(c_double), pointer :: Xp(:,:), Yp(:,:)
+        real(c_double) :: Xf(max(n,1),max(n,1)), Yf(max(n,1),max(n,1))
+
+        handle = c_null_ptr
+        fail_node = 0
+        status = BAND_INVALID_ARGUMENT
+        if (n < 1 .or. nj < 3) return
+        allocate(Af(n,n,nj), Bf(n,n,nj), Df(n,n,nj))
+        call to_fortran_blocks(n, nj, A(1:n*n*nj), Af)
+        call to_fortran_blocks(n, nj, B(1:n*n*nj), Bf)
+        call to_fortran_blocks(n, nj, D(1:n*n*nj), Df)
+        Xf = 0; Yf = 0
+        if (c_associated(X)) then
+            call c_f_pointer(X, Xp, [n, n]); Xf = transpose(Xp)
+        end if
+        if (c_associated(Y)) then
+            call c_f_pointer(Y, Yp, [n, n]); Yf = transpose(Yp)
+        end if
+        allocate(f)
+        call band_factor(n, nj, Af, Bf, Df, f, X=Xf, Y=Yf)
+        status = f%status
+        fail_node = f%fail_node
+        handle = c_loc(f)
+    end function bandsolver_f_factor
+
+    integer(c_int) function bandsolver_f_factor_solve(handle, G, dc) bind(c, name='bandsolver_f_factor_solve') &
+            result(status)
+        type(c_ptr), value :: handle
+        real(c_double), intent(in), target :: G(*)
+        real(c_double), intent(out), target :: dc(*)
+        type(band_factorization), pointer :: f
+        real(c_double), pointer :: Gv(:,:), dv(:,:)
+        integer :: fstatus
+        status = BAND_INVALID_ARGUMENT
+        if (.not. c_associated(handle)) return
+        call c_f_pointer(handle, f)
+        if (f%n < 1) then
+            status = f%status; return
+        end if
+        Gv(1:f%n,1:f%nj) => G(1:f%n*f%nj)
+        dv(1:f%n,1:f%nj) => dc(1:f%n*f%nj)
+        call band_factor_solve(f, Gv, dv, fstatus)
+        status = fstatus
+    end function bandsolver_f_factor_solve
+
+    subroutine bandsolver_f_factor_free(handle) bind(c, name='bandsolver_f_factor_free')
+        type(c_ptr), value :: handle
+        type(band_factorization), pointer :: f
+        if (.not. c_associated(handle)) return
+        call c_f_pointer(handle, f)
+        deallocate(f)
+    end subroutine bandsolver_f_factor_free
 
 end module bandsolver_capi

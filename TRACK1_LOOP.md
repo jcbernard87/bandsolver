@@ -157,7 +157,7 @@ Spec: [`docs/specs/2026-09-27-benchmarks-design.md`](docs/specs/2026-09-27-bench
 Spec: [`docs/specs/2026-09-27-performance-options-design.md`](docs/specs/2026-09-27-performance-options-design.md). There are three PRs (A, B, C), each with CI and a benchmark update. Every option can be switched on and off, and each is benchmarked against the current standard.
 - [x] P1 (PR A) Fortran fast kernel + `kernel` option (Fortran, C ABI, Python); bit-identity tests; Layer 1 benchmark reference vs fast; PR, CI, merge.
 - [x] P2 (PR B) C++ factor/solve (`Factorization`) + tests.
-- [ ] P3 (PR B) Fortran factor/solve + C ABI + Python `bs.factor`; tests incl. cross-check.
+- [x] P3 (PR B) Fortran factor/solve + C ABI + Python `bs.factor`; tests incl. cross-check.
 - [ ] P4 (PR B) Newton `jacobian_reuse` option + residual-only callback (C++, Fortran, Python); tests; Layer 2 reuse rows; PR, CI, merge.
 - [ ] P5 (PR C) C++ adaptive BDF1–2 DAE integrator with options; tests (orders, tolerance, DAE vs IDA, reuse, mask).
 - [ ] P6 (PR C) Python binding `bs.integrate` + tests + example.
@@ -175,3 +175,7 @@ Spec: [`docs/specs/2026-09-27-performance-options-design.md`](docs/specs/2026-09
 - **2026-09-27 — P1 merged** (PR #8, all 11 checks green after the ifx fix).
 - **2026-09-27 — P2.** C++ `Factorization` / `factor()` (`cpp/include/bandsolver/factor.hpp`, `src/factor.cpp`): per-node LU with partial pivoting of B^_j, the E_j blocks, the effective A'_j (Y at the last node, B += Y X' when nj=3), and X'. The `solve` does a forward sweep and back substitution. Tests: factor+solve vs one-shot solve differ by ≤ 6.6e-16 relative over the n/nj/X-Y sweep incl. nj=3; repeated RHS work; singular node reported at factor time; non-finite and invalid inputs rejected. Clean under ASan/UBSan.
   - **Timing** (nj=1000, native): one factorization is 1.0–2.2× the cost of a one-shot solve (n=1: 66 vs 37 µs; n=10: 3.2 vs 1.8 ms; n=30: 59 vs 27 ms), and a re-solve is 2–12× cheaper (19 µs, 0.33 ms, 2.3 ms). Reuse breaks even after about 2–3 uses of one factorization.
+- **2026-09-27 — P3.** Fortran `bandsolver_factor` (`band_factorization`, `band_factor`, `band_factor_solve`; column-oriented LU and sweeps), C ABI opaque handle (`bandsolver_f_factor` / `_factor_solve` / `_factor_free`), Python `bs.factor(...)` returning a `Factorization` with `.solve(G)` on both backends (GIL released during the solve).
+  - **Tests:** Fortran factor+solve vs band_solve ≤ 5.97e-16 relative (sweep incl. nj=3, X/Y); repeated RHS work; singular node reported at factor time (1-based 6); invalid inputs rejected. Python: 23 tests on both backends (vs `solve`, cross-backend, singular 0-based node, shape and NaN errors).
+  - Totals: ctest 15/15, pytest 137.
+  - A gfortran `-Wdo-subscript` warning (index j−2 inside the j==nj branch) was removed by indexing with nj−2 explicitly.
