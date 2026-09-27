@@ -34,6 +34,8 @@ __all__ = [
     "JacobianMismatch",
     "JacobianCheck",
     "solve",
+    "factor",
+    "Factorization",
     "newton",
     "fd_jacobian",
     "newton_fd",
@@ -81,7 +83,9 @@ class NewtonResult:
     update_norm: np.ndarray = field(repr=False)
     step_norm: np.ndarray = field(repr=False)
     residual_norm: np.ndarray = field(repr=False)
-    residual_evaluations: int = 0  #: set by newton_fd only
+    residual_evaluations: int = 0  #: residual-only calls (reuse) / total residual calls (newton_fd)
+    jacobian_evaluations: int = 0  #: fill calls
+    factorizations: int = 0        #: block factorizations (full Newton: one per iteration)
 
 
 @dataclass
@@ -187,6 +191,50 @@ def solve(A, B, D, G, X=None, Y=None, *, pivot: str = "partial", backend: str = 
     return dc
 
 
+class Factorization:
+    """A factored block matrix: ``solve(G)`` costs O(nj n^2) instead of a full elimination.
+
+    Create with :func:`factor`. Useful when the same matrix is solved against several
+    right-hand sides (modified Newton, time stepping with a frozen Jacobian).
+    """
+
+    def __init__(self, core, n, nj):
+        self._core, self.n, self.nj = core, n, nj
+
+    @property
+    def backend(self) -> str:
+        return self._core.backend
+
+    def solve(self, G) -> np.ndarray:
+        """Solve ``K dc = G`` (``G`` has shape ``(nj, n)``) and return ``dc``."""
+        G = _as_blocks(G, "G", (self.nj, self.n))
+        dc, status = self._core.solve(G)
+        _raise_for(status, -1, "Factorization.solve")
+        return dc
+
+
+def factor(A, B, D, X=None, Y=None, *, backend: str = "cpp") -> Factorization:
+    """Factor the block matrix (A, B, D and optional X, Y) for repeated solves.
+
+    Raises :class:`SingularBlockError` (with the 0-based ``node``) if a pivot block is
+    singular, :class:`NonFiniteError` for NaN/Inf blocks.
+    """
+    _check_backend(backend)
+    B = _as_blocks(B, "B")
+    if B.ndim != 3 or B.shape[1] != B.shape[2]:
+        raise ValueError(f"B must have shape (nj, n, n), got {B.shape}")
+    nj, n = B.shape[0], B.shape[1]
+    if nj < 3:
+        raise ValueError(f"need at least 3 nodes, got nj={nj}")
+    A = _as_blocks(A, "A", (nj, n, n))
+    D = _as_blocks(D, "D", (nj, n, n))
+    X = None if X is None else _as_blocks(X, "X", (n, n))
+    Y = None if Y is None else _as_blocks(Y, "Y", (n, n))
+    core = _core.Factorization(n, nj, A, B, D, X, Y, backend)
+    _raise_for(core.status, core.fail_node, "factor")
+    return Factorization(core, n, nj)
+
+
 FillResult = Sequence[Optional[np.ndarray]]
 
 
@@ -202,8 +250,18 @@ def newton(
     require_convergence: bool = True,
     backend: str = "cpp",
     kernel: str = "fast",
+    jacobian_reuse: bool = False,
+    reuse_max_iter: int = 5,
+    reuse_contraction: float = 0.5,
+    residual: Optional[Callable[[np.ndarray], np.ndarray]] = None,
 ) -> NewtonResult:
     """Newton iteration ``c <- c + damping * dc`` with ``K(c) dc = G(c)``.
+
+    With ``jacobian_reuse=True`` (modified Newton) the Jacobian is factored once and reused
+    while the updates contract (``step_k <= reuse_contraction * step_{k-1}``) and it has been
+    used fewer than ``reuse_max_iter`` times. An optional ``residual(c) -> F`` callback lets
+    reuse iterations skip building the blocks. ``NewtonResult.factorizations`` and
+    ``jacobian_evaluations`` report the work done.
 
     ``fill(c)`` receives the current state (shape ``(nj, n)``, a copy) and returns
     ``(A, B, D, G)`` or ``(A, B, D, G, X, Y)`` where ``G = -F(c)`` is the negative
@@ -226,9 +284,16 @@ def newton(
         raise ValueError("damping must be in (0, 1]")
     if rtol < 0 or atol < 0 or (rtol == 0 and atol == 0):
         raise ValueError("rtol and atol must be >= 0 and not both zero")
+    _check_reuse(reuse_max_iter, reuse_contraction)
     r = _core.newton(n, nj, fill, c0, rtol, atol, damping, int(max_iter), _pivot_code(pivot),
-                     bool(require_convergence), backend, _kernel_code(kernel))
+                     bool(require_convergence), backend, _kernel_code(kernel), bool(jacobian_reuse),
+                     int(reuse_max_iter), float(reuse_contraction), residual)
     return _newton_result(r, "newton")
+
+
+def _check_reuse(reuse_max_iter, reuse_contraction):
+    if int(reuse_max_iter) < 1 or not (reuse_contraction > 0):
+        raise ValueError("reuse_max_iter must be >= 1 and reuse_contraction > 0")
 
 
 def _newton_result(r, what: str) -> NewtonResult:
@@ -241,6 +306,8 @@ def _newton_result(r, what: str) -> NewtonResult:
         step_norm=np.asarray(r["step_norm"]),
         residual_norm=np.asarray(r["residual_norm"]),
         residual_evaluations=int(r.get("residual_evaluations", 0)),
+        jacobian_evaluations=int(r.get("jacobian_evaluations", 0)),
+        factorizations=int(r.get("factorizations", 0)),
     )
     if result.status == _NOT_CONVERGED:
         raise NotConvergedError(
@@ -297,8 +364,14 @@ def newton_fd(
     typical: float = 1.0,
     backend: str = "cpp",
     kernel: str = "fast",
+    jacobian_reuse: bool = False,
+    reuse_max_iter: int = 5,
+    reuse_contraction: float = 0.5,
 ) -> NewtonResult:
     """Newton iteration where the Jacobian comes from :func:`fd_jacobian`.
+
+    With ``jacobian_reuse=True`` iterations that reuse the factorization cost one residual
+    evaluation instead of ``3n + 1``.
 
     Only the residual is required. Options and errors are as for :func:`newton`;
     ``NewtonResult.residual_evaluations`` reports the total residual calls
@@ -312,8 +385,10 @@ def newton_fd(
         raise ValueError("damping must be in (0, 1]")
     if rtol < 0 or atol < 0 or (rtol == 0 and atol == 0):
         raise ValueError("rtol and atol must be >= 0 and not both zero")
+    _check_reuse(reuse_max_iter, reuse_contraction)
     r = _core.newton_fd(n, nj, residual, c0, rtol, atol, damping, int(max_iter), _pivot_code(pivot),
-                        bool(require_convergence), rel_step, typical, backend, _kernel_code(kernel))
+                        bool(require_convergence), rel_step, typical, backend, _kernel_code(kernel),
+                        bool(jacobian_reuse), int(reuse_max_iter), float(reuse_contraction))
     return _newton_result(r, "newton_fd")
 
 

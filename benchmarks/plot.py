@@ -68,6 +68,7 @@ def plot_linear():
 TRANSIENT_SERIES = [  # fixed order
     ("bandsolver BDF2, 1 Newton iter/step", "bandsolver BDF2, 1 Newton iteration/step", BLUE, "-"),
     ("bandsolver BDF2", "bandsolver BDF2, full Newton", BLUE, "--"),
+    ("bandsolver BDF2, Jacobian reuse", "bandsolver BDF2, Jacobian reuse (within step)", BLUE, ":"),
     ("bandsolver BE", "bandsolver backward Euler, full Newton", ORANGE, "-"),
     ("SUNDIALS IDA", "SUNDIALS IDA (adaptive BDF 1-5, DAE)", AQUA, "-"),
     ("SciPy BDF", "SciPy solve_ivp BDF (reduced ODE)", YELLOW, "-"),
@@ -88,6 +89,7 @@ def plot_transient():
 
     mesh = read("transient_mesh.csv")
     series = [("bandsolver BDF2, 1 iter (dt=5e-3)", BLUE, "-"), ("bandsolver BDF2 (dt=5e-3)", BLUE, "--"),
+              ("bandsolver BDF2, reuse (dt=5e-3)", BLUE, ":"),
               ("SUNDIALS IDA (rtol=1e-6)", AQUA, "-"), ("SciPy BDF (rtol=1e-6)", YELLOW, "-")]
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10.5, 3.8))
     for method, color, ls in series:

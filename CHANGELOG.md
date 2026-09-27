@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Added
+- **Factor/solve split:** `factor()` / `Factorization` in C++, Fortran, the C ABI (opaque handle) and Python (`bs.factor`). A re-solve is 2–12× cheaper than a one-shot solve.
+- **Jacobian reuse option** (modified Newton; off by default): `jacobian_reuse`, `reuse_max_iter`, `reuse_contraction`, and an optional residual-only callback (`bandsolver_f_newton_ex` in C; the `band_problem%residual` override in Fortran).
+  - `newton_fd` with reuse spends one residual evaluation per reuse iteration.
+  - Results report `jacobian_evaluations` and `factorizations`.
+  - C ABI: fields are appended to `bandsolver_newton_options` / `bandsolver_newton_result`.
 - **Fortran fast kernel** (`kernel` option, default `fast`): column-major loops in the partial-pivot path, bit-identical to the archival loop order (`reference`) with gfortran and equal to rounding with other compilers. Intel Fortran builds now use the precise FP model.
   - The Fortran core is now at parity with C++ for blocks n ≥ 5 when called from Fortran, and within 1.06–1.34× through the C ABI (previously 1.5–2.2×).
   - C ABI: `bandsolver_f_solve_kernel` was added, and **`bandsolver_newton_options` gains a trailing `kernel` field**. C callers that initialise it with `bandsolver_f_default_options` need no change.

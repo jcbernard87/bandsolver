@@ -1,5 +1,6 @@
 add_library(bandsolver_f
   src/band_kernel.f90
+  src/band_factor.f90
   src/band_newton.f90
   src/band_fd.f90
   src/band_capi.f90)

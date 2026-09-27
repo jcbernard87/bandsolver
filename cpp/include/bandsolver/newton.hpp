@@ -24,6 +24,12 @@ struct NewtonOptions {
     int max_iter = 50;
     Pivot pivot = Pivot::partial;
     bool require_convergence = true;
+    // Jacobian reuse (modified Newton): factor once, keep solving with that factorization
+    // while the updates contract (step_k <= reuse_contraction * step_{k-1}) and it has been
+    // used fewer than reuse_max_iter times; otherwise refresh. Off by default.
+    bool jacobian_reuse = false;
+    int reuse_max_iter = 5;
+    double reuse_contraction = 0.5;
 };
 
 struct NewtonResult {
@@ -35,13 +41,21 @@ struct NewtonResult {
     std::vector<double> step_norm;       // max |dc| per iteration
     std::vector<double> residual_norm;   // max |G| at the start of each iteration
     std::exception_ptr callback_exception;
-    long residual_evaluations = 0;       // set by newton_fd only
+    long residual_evaluations = 0;       // residual-only callback calls (reuse) / newton_fd count
+    int jacobian_evaluations = 0;        // fill calls (blocks + G)
+    int factorizations = 0;              // block factorizations (full Newton: one per iteration)
 };
 
 using FillFunction = std::function<void(const double* c, BlockSystem& sys)>;
 
-// Iterate in place on c (n*nj values). Errors are reported through the result.
-NewtonResult newton(int n, int nj, const FillFunction& fill, double* c, const NewtonOptions& opts = {});
+// Evaluate F(c) into F (n*nj values). May throw to signal failure.
+using ResidualFunction = std::function<void(const double* c, double* F)>;
+
+// Iterate in place on c (n*nj values). Errors are reported through the result. With
+// opts.jacobian_reuse, an optional residual-only callback lets iterations that reuse the
+// factorization skip building the blocks (otherwise fill is called and its blocks ignored).
+NewtonResult newton(int n, int nj, const FillFunction& fill, double* c, const NewtonOptions& opts = {},
+                    const ResidualFunction& residual = {});
 
 }  // namespace bandsolver
 

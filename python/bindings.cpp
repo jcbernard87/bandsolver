@@ -15,6 +15,7 @@
 #include <bandsolver/band.hpp>
 #include <bandsolver/newton.hpp>
 #include <bandsolver/fd.hpp>
+#include <bandsolver/factor.hpp>
 
 #include "bandsolver_f.h"
 
@@ -109,8 +110,31 @@ extern "C" int fortran_trampoline(int n, int nj, const double* c, double* A, dou
     }
 }
 
+struct FortranPairCtx {
+    const py::function* fill;
+    const py::function* residual;
+    std::exception_ptr error;
+};
+
+extern "C" int pair_fill(int n, int nj, const double* c, double* A, double* B, double* D, double* G, double* X,
+                         double* Y, void* ctx) {
+    auto* f = static_cast<FortranPairCtx*>(ctx);
+    try { call_fill(*f->fill, n, nj, c, A, B, D, G, X, Y); return 0; }
+    catch (...) { f->error = std::current_exception(); return 1; }
+}
+
+void call_residual(const py::function& residual, int n, int nj, const double* c, double* F);
+
+extern "C" int pair_residual(int n, int nj, const double* c, double* F, void* ctx) {
+    auto* f = static_cast<FortranPairCtx*>(ctx);
+    try { call_residual(*f->residual, n, nj, c, F); return 0; }
+    catch (...) { f->error = std::current_exception(); return 1; }
+}
+
 py::dict newton(int n, int nj, const py::function& fill, const Arr& c0, double rtol, double atol, double damping,
-                int max_iter, int pivot, bool require_convergence, const std::string& backend, int kernel) {
+                int max_iter, int pivot, bool require_convergence, const std::string& backend, int kernel,
+                bool jacobian_reuse, int reuse_max_iter, double reuse_contraction,
+                const std::optional<py::function>& residual) {
     if (n < 1 || nj < 3) throw std::invalid_argument("require n >= 1 and nj >= 3");
     if (max_iter < 1) throw std::invalid_argument("max_iter must be >= 1");
     require_size(c0, static_cast<py::ssize_t>(n) * nj, "c0");
@@ -121,13 +145,16 @@ py::dict newton(int n, int nj, const py::function& fill, const Arr& c0, double r
         bandsolver::NewtonOptions o;
         o.rtol = rtol; o.atol = atol; o.damping = damping; o.max_iter = max_iter;
         o.pivot = static_cast<bandsolver::Pivot>(pivot); o.require_convergence = require_convergence;
+        o.jacobian_reuse = jacobian_reuse; o.reuse_max_iter = reuse_max_iter; o.reuse_contraction = reuse_contraction;
+        bandsolver::ResidualFunction rf;
+        if (residual) rf = [&](const double* x, double* F) { call_residual(*residual, n, nj, x, F); };
         auto res = bandsolver::newton(
             n, nj,
             [&](const double* cc, bandsolver::BlockSystem& s) {
                 call_fill(fill, n, nj, cc, s.A().data(), s.B().data(), s.D().data(), s.G().data(), s.X().data(),
                           s.Y().data());
             },
-            c.mutable_data(), o);
+            c.mutable_data(), o, rf);
         if (res.callback_exception) std::rethrow_exception(res.callback_exception);
         r["status"] = static_cast<int>(res.status);
         r["iterations"] = res.iterations;
@@ -136,13 +163,18 @@ py::dict newton(int n, int nj, const py::function& fill, const Arr& c0, double r
         r["update_norm"] = res.update_norm;
         r["step_norm"] = res.step_norm;
         r["residual_norm"] = res.residual_norm;
+        r["jacobian_evaluations"] = res.jacobian_evaluations;
+        r["factorizations"] = res.factorizations;
+        r["residual_evaluations"] = res.residual_evaluations;
     } else if (backend == "fortran") {
-        bandsolver_newton_options o{rtol, atol, damping, max_iter, pivot, require_convergence ? 1 : 0, kernel};
+        bandsolver_newton_options o{rtol, atol, damping, max_iter, pivot, require_convergence ? 1 : 0, kernel,
+                                    jacobian_reuse ? 1 : 0, reuse_max_iter, reuse_contraction};
         bandsolver_newton_result res;
         std::vector<double> hu(max_iter), hs(max_iter), hr(max_iter);
-        FortranCtx ctx{&fill, nullptr};
-        bandsolver_f_newton(n, nj, fortran_trampoline, &ctx, c.mutable_data(), &o, &res, hu.data(), hs.data(),
-                            hr.data());
+        const py::function* rp = residual ? &*residual : nullptr;
+        FortranPairCtx ctx{&fill, rp, nullptr};
+        bandsolver_f_newton_ex(n, nj, pair_fill, rp ? pair_residual : nullptr, &ctx, c.mutable_data(), &o, &res,
+                               hu.data(), hs.data(), hr.data());
         if (ctx.error) std::rethrow_exception(ctx.error);
         // Histories: residual is recorded before each solve, step/update after a successful one.
         const int nres = std::min(res.iterations, max_iter);
@@ -155,6 +187,9 @@ py::dict newton(int n, int nj, const py::function& fill, const Arr& c0, double r
         r["update_norm"] = std::vector<double>(hu.begin(), hu.begin() + nstep);
         r["step_norm"] = std::vector<double>(hs.begin(), hs.begin() + nstep);
         r["residual_norm"] = std::vector<double>(hr.begin(), hr.begin() + nres);
+        r["jacobian_evaluations"] = res.jacobian_evaluations;
+        r["factorizations"] = res.factorizations;
+        r["residual_evaluations"] = res.residual_evaluations;
     } else {
         throw std::invalid_argument("backend must be 'cpp' or 'fortran'");
     }
@@ -235,7 +270,8 @@ py::tuple fd_jacobian(int n, int nj, const py::function& residual, const Arr& c,
 
 py::dict newton_fd(int n, int nj, const py::function& residual, const Arr& c0, double rtol, double atol,
                    double damping, int max_iter, int pivot, bool require_convergence, double rel_step, double typical,
-                   const std::string& backend, int kernel) {
+                   const std::string& backend, int kernel, bool jacobian_reuse, int reuse_max_iter,
+                   double reuse_contraction) {
     if (n < 1 || nj < 3) throw std::invalid_argument("require n >= 1 and nj >= 3");
     if (max_iter < 1) throw std::invalid_argument("max_iter must be >= 1");
     require_size(c0, static_cast<py::ssize_t>(n) * nj, "c0");
@@ -247,6 +283,7 @@ py::dict newton_fd(int n, int nj, const py::function& residual, const Arr& c0, d
         bandsolver::NewtonOptions no;
         no.rtol = rtol; no.atol = atol; no.damping = damping; no.max_iter = max_iter;
         no.pivot = static_cast<bandsolver::Pivot>(pivot); no.require_convergence = require_convergence;
+        no.jacobian_reuse = jacobian_reuse; no.reuse_max_iter = reuse_max_iter; no.reuse_contraction = reuse_contraction;
         auto res = bandsolver::newton_fd(
             n, nj, [&](const double* x, double* F) { call_residual(residual, n, nj, x, F); }, c.mutable_data(), no, o);
         if (res.callback_exception) std::rethrow_exception(res.callback_exception);
@@ -258,8 +295,11 @@ py::dict newton_fd(int n, int nj, const py::function& residual, const Arr& c0, d
         r["step_norm"] = res.step_norm;
         r["residual_norm"] = res.residual_norm;
         r["residual_evaluations"] = res.residual_evaluations;
+        r["jacobian_evaluations"] = res.jacobian_evaluations;
+        r["factorizations"] = res.factorizations;
     } else if (backend == "fortran") {
-        bandsolver_newton_options no{rtol, atol, damping, max_iter, pivot, require_convergence ? 1 : 0, kernel};
+        bandsolver_newton_options no{rtol, atol, damping, max_iter, pivot, require_convergence ? 1 : 0, kernel,
+                                     jacobian_reuse ? 1 : 0, reuse_max_iter, reuse_contraction};
         bandsolver_fd_options fo{o.rel_step, o.typical};
         bandsolver_newton_result res;
         std::vector<double> hu(max_iter), hs(max_iter), hr(max_iter);
@@ -279,6 +319,8 @@ py::dict newton_fd(int n, int nj, const py::function& residual, const Arr& c0, d
         r["step_norm"] = std::vector<double>(hs.begin(), hs.begin() + nstep);
         r["residual_norm"] = std::vector<double>(hr.begin(), hr.begin() + nres);
         r["residual_evaluations"] = evals;
+        r["jacobian_evaluations"] = res.jacobian_evaluations;
+        r["factorizations"] = res.factorizations;
     } else {
         throw std::invalid_argument("backend must be 'cpp' or 'fortran'");
     }
@@ -326,6 +368,61 @@ py::dict check_jacobian(int n, int nj, const py::function& fill, const Arr& c, d
     return r;
 }
 
+// One factorization, from either backend.
+class PyFactorization {
+public:
+    PyFactorization(int n, int nj, const Arr& A, const Arr& B, const Arr& D, const std::optional<Arr>& X,
+                    const std::optional<Arr>& Y, const std::string& backend)
+        : n_(n), nj_(nj), backend_(backend) {
+        if (n < 1 || nj < 3) throw std::invalid_argument("require n >= 1 and nj >= 3");
+        const py::ssize_t nb = static_cast<py::ssize_t>(n) * n * nj;
+        require_size(A, nb, "A"); require_size(B, nb, "B"); require_size(D, nb, "D");
+        const double* xp = opt_ptr(X, static_cast<py::ssize_t>(n) * n, "X");
+        const double* yp = opt_ptr(Y, static_cast<py::ssize_t>(n) * n, "Y");
+        if (backend == "cpp") {
+            bandsolver::SystemView v{n, nj, A.data(), B.data(), D.data(), nullptr, xp, yp};
+            cpp_ = bandsolver::factor(v);
+            status_ = static_cast<int>(cpp_.status());
+            fail_node_ = cpp_.fail_node();
+        } else if (backend == "fortran") {
+            int fnode = 0;
+            status_ = bandsolver_f_factor(n, nj, A.data(), B.data(), D.data(), xp, yp, &handle_, &fnode);
+            fail_node_ = fnode > 0 ? fnode - 1 : -1;
+        } else {
+            throw std::invalid_argument("backend must be 'cpp' or 'fortran'");
+        }
+    }
+    ~PyFactorization() { if (handle_) bandsolver_f_factor_free(handle_); }
+    PyFactorization(const PyFactorization&) = delete;
+    PyFactorization& operator=(const PyFactorization&) = delete;
+
+    py::tuple solve(const Arr& G) const {
+        require_size(G, static_cast<py::ssize_t>(n_) * nj_, "G");
+        Arr dc({static_cast<py::ssize_t>(nj_), static_cast<py::ssize_t>(n_)});
+        int status;
+        {
+            py::gil_scoped_release release;
+            if (backend_ == "cpp")
+                status = static_cast<int>(cpp_.solve(G.data(), dc.mutable_data()).status);
+            else
+                status = bandsolver_f_factor_solve(handle_, G.data(), dc.mutable_data());
+        }
+        return py::make_tuple(dc, status);
+    }
+    int status() const { return status_; }
+    int fail_node() const { return fail_node_; }
+    int n() const { return n_; }
+    int nj() const { return nj_; }
+    const std::string& backend() const { return backend_; }
+
+private:
+    int n_, nj_;
+    std::string backend_;
+    bandsolver::Factorization cpp_;
+    void* handle_ = nullptr;
+    int status_ = 2, fail_node_ = -1;
+};
+
 }  // namespace
 
 PYBIND11_MODULE(_core, m) {
@@ -334,12 +431,25 @@ PYBIND11_MODULE(_core, m) {
           py::arg("X"), py::arg("Y"), py::arg("pivot"), py::arg("backend"), py::arg("kernel") = 0);
     m.def("newton", &newton, py::arg("n"), py::arg("nj"), py::arg("fill"), py::arg("c0"), py::arg("rtol"),
           py::arg("atol"), py::arg("damping"), py::arg("max_iter"), py::arg("pivot"), py::arg("require_convergence"),
-          py::arg("backend"), py::arg("kernel") = 0);
+          py::arg("backend"), py::arg("kernel") = 0, py::arg("jacobian_reuse") = false,
+          py::arg("reuse_max_iter") = 5, py::arg("reuse_contraction") = 0.5, py::arg("residual") = py::none());
+    py::class_<PyFactorization>(m, "Factorization")
+        .def(py::init<int, int, const Arr&, const Arr&, const Arr&, const std::optional<Arr>&,
+                      const std::optional<Arr>&, const std::string&>(),
+             py::arg("n"), py::arg("nj"), py::arg("A"), py::arg("B"), py::arg("D"), py::arg("X"), py::arg("Y"),
+             py::arg("backend"))
+        .def("solve", &PyFactorization::solve, py::arg("G"))
+        .def_property_readonly("status", &PyFactorization::status)
+        .def_property_readonly("fail_node", &PyFactorization::fail_node)
+        .def_property_readonly("n", &PyFactorization::n)
+        .def_property_readonly("nj", &PyFactorization::nj)
+        .def_property_readonly("backend", &PyFactorization::backend);
     m.def("fd_jacobian", &fd_jacobian, py::arg("n"), py::arg("nj"), py::arg("residual"), py::arg("c"),
           py::arg("rel_step"), py::arg("typical"), py::arg("backend"));
     m.def("newton_fd", &newton_fd, py::arg("n"), py::arg("nj"), py::arg("residual"), py::arg("c0"), py::arg("rtol"),
           py::arg("atol"), py::arg("damping"), py::arg("max_iter"), py::arg("pivot"), py::arg("require_convergence"),
-          py::arg("rel_step"), py::arg("typical"), py::arg("backend"), py::arg("kernel") = 0);
+          py::arg("rel_step"), py::arg("typical"), py::arg("backend"), py::arg("kernel") = 0,
+          py::arg("jacobian_reuse") = false, py::arg("reuse_max_iter") = 5, py::arg("reuse_contraction") = 0.5);
     m.def("check_jacobian", &check_jacobian, py::arg("n"), py::arg("nj"), py::arg("fill"), py::arg("c"),
           py::arg("rel_step"), py::arg("typical"), py::arg("backend"));
 }

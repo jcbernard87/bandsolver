@@ -60,7 +60,11 @@ NewtonResult newton_fd(int n, int nj, const ResidualFunction& residual, double* 
         r.status = Status::invalid_argument;
         return r;
     }
-    NewtonResult r = newton(n, nj, fd_fill(n, nj, residual, fd, &evals), c, opts);
+    ResidualFunction counted = [&](const double* x, double* F) {
+        ++evals;
+        residual(x, F);
+    };
+    NewtonResult r = newton(n, nj, fd_fill(n, nj, residual, fd, &evals), c, opts, counted);
     r.residual_evaluations = evals;
     return r;
 }

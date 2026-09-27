@@ -88,11 +88,25 @@ class Model:
             return A, B, D, -F
         return fill
 
-    def run_bandsolver(self, dt, scheme="BE", backend="cpp", linearized=False):
+    def _step_residual(self, a0, hist):
+        V = self.V
+
+        def residual(u):
+            c, phi = u[:, 0], u[:, 1]
+            F = self.operator(c, phi)
+            acc = V * (a0 * c + hist)
+            F[:, 0] += acc
+            F[:-1, 1] += acc[:-1]
+            return F
+        return residual
+
+    def run_bandsolver(self, dt, scheme="BE", backend="cpp", linearized=False, reuse=False):
         """Fixed-step BE/BDF2. linearized=True takes one Newton correction per step (the archival
         usage): no convergence loop, which is enough when the step is small relative to the
         nonlinearity."""
         nopts = dict(max_iter=1, require_convergence=False) if linearized else {}
+        if reuse:
+            nopts["jacobian_reuse"] = True
         steps = int(round(T_END / dt))
         u = self.initial()
         c_prev = None
@@ -100,9 +114,12 @@ class Model:
         for k in range(steps):
             c_n = u[:, 0].copy()
             if scheme == "BE" or c_prev is None:        # BDF2 starts with one BE step
-                fill = self._step_fill(1 / dt, -c_n / dt)
+                a0, hist = 1 / dt, -c_n / dt
             else:
-                fill = self._step_fill(1.5 / dt, (-4 * c_n + c_prev) / (2 * dt))
+                a0, hist = 1.5 / dt, (-4 * c_n + c_prev) / (2 * dt)
+            fill = self._step_fill(a0, hist)
+            if reuse:
+                nopts["residual"] = self._step_residual(a0, hist)
             r = bs.newton(fill, u, backend=backend, **nopts)
             u, c_prev = r.c, c_n
             newton_iters += r.iterations
@@ -199,6 +216,8 @@ def work_precision(nj=81, quick=False):
     runs += [("bandsolver BDF2", dt, lambda dt=dt: m.run_bandsolver(dt, "BDF2")) for dt in dts]
     runs += [("bandsolver BDF2, 1 Newton iter/step", dt, lambda dt=dt: m.run_bandsolver(dt, "BDF2", linearized=True))
              for dt in dts]
+    runs += [("bandsolver BDF2, Jacobian reuse", dt, lambda dt=dt: m.run_bandsolver(dt, "BDF2", reuse=True))
+             for dt in dts]
     runs += [("SUNDIALS IDA", r, lambda r=r: m.run_ida(r)) for r in rtols] if ida else []
     runs += [("SciPy BDF", r, lambda r=r: m.run_scipy(r)) for r in rtols]
     rows = []
@@ -218,6 +237,7 @@ def mesh_scaling(quick=False):
         m = Model(nj)
         for method, run in [("bandsolver BDF2 (dt=5e-3)", lambda: m.run_bandsolver(5e-3, "BDF2")),
                             ("bandsolver BDF2, 1 iter (dt=5e-3)", lambda: m.run_bandsolver(5e-3, "BDF2", linearized=True)),
+                            ("bandsolver BDF2, reuse (dt=5e-3)", lambda: m.run_bandsolver(5e-3, "BDF2", reuse=True)),
                             ("SUNDIALS IDA (rtol=1e-6)", lambda: m.run_ida(1e-6)),
                             ("SciPy BDF (rtol=1e-6)", lambda: m.run_scipy(1e-6))]:
             if method.startswith("SUNDIALS") and not have_ida():

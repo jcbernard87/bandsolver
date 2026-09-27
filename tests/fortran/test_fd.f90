@@ -142,6 +142,24 @@ program test_fd
     call check(ra%converged .and. rf%converged .and. maxval(abs(c - cf)) < 1.0e-10_dp, 'band_newton_fd matches analytic Newton')
     call check(rf%residual_evaluations == (3*n + 1)*rf%iterations, 'residual evaluations = (3n+1) per iteration')
 
+    ! Jacobian reuse with FD Jacobians: same root, fewer factorizations, and reuse iterations cost
+    ! one residual evaluation instead of 3n+1.
+    block
+        type(newton_options) :: ro
+        type(newton_result) :: rr
+        real(dp), allocatable :: cr(:,:)
+        allocate(cr(n,nj))
+        cr = reshape([(0.3_dp + 0.01_dp*i, i = 0, n*nj - 1)], [n, nj])
+        ro%jacobian_reuse = .true.
+        call band_newton_fd(an%p, n, nj, cr, ro, rr)
+        print '(a,i0,a,i0,a,i0,a,es9.2)', 'FD + reuse: ', rr%iterations, ' iterations, ', rr%factorizations, &
+            ' factorizations, ', rr%residual_evaluations, ' residual evaluations; max diff ', maxval(abs(cr - c))
+        call check(rr%converged .and. maxval(abs(cr - c)) < 1.0e-9_dp, 'band_newton_fd with reuse reaches the same root')
+        call check(rr%factorizations < rr%iterations, 'reuse needs fewer factorizations than iterations')
+        call check(rr%residual_evaluations == (3*n + 1)*rr%factorizations + (rr%iterations - rr%factorizations), &
+            'reuse iterations cost one residual evaluation each')
+    end block
+
     ! check_jacobian: clean, planted D error, missing X entry.
     c = reshape([(0.3_dp + 0.01_dp*i, i = 0, n*nj - 1)], [n, nj])
     an%plant = 0

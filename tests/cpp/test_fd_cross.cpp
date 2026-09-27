@@ -96,6 +96,37 @@ int main() {
         check(st == BANDSOLVER_CALLBACK_ERROR, "C residual error propagates (Fortran newton_fd)");
     }
 
+    {  // Jacobian reuse through the C ABI (Fortran) vs the C++ driver, with a residual callback
+        const int n = 3, nj = 40;
+        Problem p(n, nj, 5);
+        Ctx ctx{&p};
+        std::vector<double> cc(n * nj), cf(n * nj);
+        for (int i = 0; i < n * nj; ++i) cc[i] = cf[i] = 0.3 + 0.01 * i;
+        NewtonOptions o;
+        o.jacobian_reuse = true;
+        NewtonResult rc = newton(n, nj, [&](const double* x, BlockSystem& s) { p.fill(x, s); }, cc.data(), o,
+                                 [&](const double* x, double* F) { p.residual(x, F); });
+        bandsolver_newton_options fo;
+        bandsolver_newton_result fr;
+        bandsolver_f_default_options(&fo);
+        fo.jacobian_reuse = 1;
+        int st = bandsolver_f_newton_ex(n, nj, c_fill, c_residual, &ctx, cf.data(), &fo, &fr, nullptr, nullptr, nullptr);
+        double d = 0;
+        for (int i = 0; i < n * nj; ++i) d = std::max(d, std::abs(cc[i] - cf[i]));
+        std::printf("reuse: C++ %d it / %d factorizations / %ld residual calls; Fortran %d / %d / %d; max diff %.1e\n",
+                    rc.iterations, rc.factorizations, rc.residual_evaluations, fr.iterations, fr.factorizations,
+                    fr.residual_evaluations, d);
+        check(st == 0 && fr.converged && rc.iterations == fr.iterations && rc.factorizations == fr.factorizations &&
+                  rc.residual_evaluations == fr.residual_evaluations && d < 1e-12,
+              "C++ and Fortran Jacobian-reuse drivers agree (iterations, factorizations, residual calls, root)");
+        fo.jacobian_reuse = 0;
+        std::vector<double> cg(n * nj);
+        for (int i = 0; i < n * nj; ++i) cg[i] = 0.3 + 0.01 * i;
+        st = bandsolver_f_newton_ex(n, nj, c_fill, c_residual, &ctx, cg.data(), &fo, &fr, nullptr, nullptr, nullptr);
+        check(st == 0 && fr.factorizations == fr.iterations && fr.residual_evaluations == 0,
+              "reuse off: full Newton through newton_ex (residual callback unused)");
+    }
+
     {
         const int n = 3, nj = 10;
         Problem p(n, nj, 9);

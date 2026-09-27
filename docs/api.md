@@ -79,6 +79,25 @@ bandsolver::NewtonResult r = bandsolver::newton(n, nj,
 
 `solve(SystemView, …)` and `newton` report errors through their return values. Only `std::bad_alloc` can propagate out of them.
 
+## Factor once, solve many
+
+- **C++:** `bandsolver::factor(SystemView) -> Factorization` (`status()`, `fail_node()`, `solve(G, dc)`).
+- **Fortran:** `band_factor(n, nj, A, B, D, f [, X, Y])` and `band_factor_solve(f, G, dc, status)`.
+- **C:** `bandsolver_f_factor` / `_factor_solve` / `_factor_free`, using an opaque handle.
+- **Python:** `bs.factor(A, B, D, X, Y, backend=) -> Factorization` with `.solve(G)`.
+
+A factorization costs 1–2× a one-shot solve; each re-solve is O(nj·n²).
+
+## Jacobian reuse (modified Newton)
+
+The option is off by default.
+- **Fortran:** `newton_options%jacobian_reuse` (with `reuse_max_iter` and `reuse_contraction`). Override `band_problem%residual` to supply a residual-only evaluation.
+- **C++:** `NewtonOptions::jacobian_reuse` etc., plus an optional `ResidualFunction` argument to `newton()`.
+- **C:** fields appended to `bandsolver_newton_options`, and `bandsolver_f_newton_ex(..., residual, ...)`.
+- **Python:** `newton(..., jacobian_reuse=True, residual=f)` and `newton_fd(..., jacobian_reuse=True)`.
+
+In every interface, results gain `jacobian_evaluations` and `factorizations`.
+
 ## Finite-difference Jacobians (all interfaces)
 
 These build `A, B, D, X, Y` and `G = −F` from a residual `F(c)` using 3n + 1 residual evaluations; see [math.md](math.md#finite-difference-jacobians). Options are `rel_step` (default √ε) and `typical` (default 1).

@@ -5,17 +5,21 @@ module bandsolver_capi
     use bandsolver_kernel
     use bandsolver_newton
     use bandsolver_fd
+    use bandsolver_factor
     implicit none
     private
 
     type, bind(c) :: c_newton_options
         real(c_double) :: rtol, atol, damping
         integer(c_int) :: max_iter, pivot, require_convergence, kernel
+        integer(c_int) :: jacobian_reuse, reuse_max_iter
+        real(c_double) :: reuse_contraction
     end type c_newton_options
 
     type, bind(c) :: c_newton_result
         integer(c_int) :: status, iterations, converged, fail_node
         real(c_double) :: update_norm, step_norm, residual_norm
+        integer(c_int) :: jacobian_evaluations, factorizations, residual_evaluations
     end type c_newton_result
 
     abstract interface
@@ -63,10 +67,12 @@ module bandsolver_capi
     !> Adapts a C callback + context to the Fortran band_problem interface.
     type, extends(band_problem) :: c_problem
         type(c_funptr) :: cfill = c_null_funptr
+        type(c_funptr) :: cres = c_null_funptr      !< optional residual-only callback
         type(c_ptr) :: ctx = c_null_ptr
         real(c_double), allocatable :: At(:,:,:), Bt(:,:,:), Dt(:,:,:), Xt(:,:), Yt(:,:)
     contains
         procedure :: fill => c_problem_fill
+        procedure :: residual => c_problem_residual
     end type c_problem
 
 contains
@@ -84,7 +90,8 @@ contains
     subroutine bandsolver_f_default_options(opts) bind(c, name='bandsolver_f_default_options')
         type(c_newton_options), intent(out) :: opts
         type(newton_options) :: d
-        opts = c_newton_options(d%rtol, d%atol, d%damping, d%max_iter, d%pivot, 1, d%kernel)
+        opts = c_newton_options(d%rtol, d%atol, d%damping, d%max_iter, d%pivot, 1, d%kernel, 0, d%reuse_max_iter, &
+                                d%reuse_contraction)
     end subroutine bandsolver_f_default_options
 
     integer(c_int) function bandsolver_f_solve(n, nj, A, B, D, G, X, Y, pivot, dc, fail_node, &
@@ -155,10 +162,39 @@ contains
         Y = transpose(self%Yt)
     end subroutine c_problem_fill
 
+    subroutine c_problem_residual(self, n, nj, c, F, ierr)
+        class(c_problem), intent(inout) :: self
+        integer, intent(in) :: n, nj
+        real(c_double), intent(in) :: c(n,nj)
+        real(c_double), intent(out) :: F(n,nj)
+        integer, intent(out) :: ierr
+        procedure(c_residual_iface), pointer :: cres
+        F = 0
+        if (.not. c_associated(self%cres)) then
+            ierr = RESIDUAL_NOT_PROVIDED
+            return
+        end if
+        call c_f_procpointer(self%cres, cres)
+        ierr = cres(int(n, c_int), int(nj, c_int), c, F, self%ctx)
+    end subroutine c_problem_residual
+
     integer(c_int) function bandsolver_f_newton(n, nj, fill, ctx, c, opts, res, update_history, &
             step_history, residual_history) bind(c, name='bandsolver_f_newton') result(status)
         integer(c_int), value :: n, nj
         type(c_funptr), value :: fill
+        type(c_ptr), value :: ctx
+        real(c_double), intent(inout) :: c(*)
+        type(c_newton_options), intent(in) :: opts
+        type(c_newton_result), intent(out) :: res
+        type(c_ptr), value :: update_history, step_history, residual_history
+        status = bandsolver_f_newton_ex(n, nj, fill, c_null_funptr, ctx, c, opts, res, update_history, &
+                                        step_history, residual_history)
+    end function bandsolver_f_newton
+
+    integer(c_int) function bandsolver_f_newton_ex(n, nj, fill, residual, ctx, c, opts, res, update_history, &
+            step_history, residual_history) bind(c, name='bandsolver_f_newton_ex') result(status)
+        integer(c_int), value :: n, nj
+        type(c_funptr), value :: fill, residual
         type(c_ptr), value :: ctx
         real(c_double), intent(inout), target :: c(*)
         type(c_newton_options), intent(in) :: opts
@@ -169,14 +205,16 @@ contains
         type(newton_result) :: fr
         real(c_double), pointer :: cf(:,:)
 
-        res = c_newton_result(BAND_INVALID_ARGUMENT, 0, 0, 0, 0, 0, 0)
+        res = c_newton_result(BAND_INVALID_ARGUMENT, 0, 0, 0, 0, 0, 0, 0, 0, 0)
         status = BAND_INVALID_ARGUMENT
         if (n < 1 .or. nj < 3 .or. .not. c_associated(fill)) return
         prob%cfill = fill
+        prob%cres = residual
         prob%ctx = ctx
         allocate(prob%At(n,n,nj), prob%Bt(n,n,nj), prob%Dt(n,n,nj), prob%Xt(n,n), prob%Yt(n,n))
         fo = newton_options(opts%rtol, opts%atol, opts%damping, opts%max_iter, opts%pivot, &
-                            opts%require_convergence /= 0, opts%kernel)
+                            opts%require_convergence /= 0, opts%kernel, opts%jacobian_reuse /= 0, &
+                            opts%reuse_max_iter, opts%reuse_contraction)
         cf(1:n,1:nj) => c(1:n*nj)
         call band_newton(prob, n, nj, cf, fo, fr)
 
@@ -185,13 +223,16 @@ contains
         res%iterations = fr%iterations
         res%converged = merge(1, 0, fr%converged)
         res%fail_node = fr%fail_node
+        res%jacobian_evaluations = fr%jacobian_evaluations
+        res%factorizations = fr%factorizations
+        res%residual_evaluations = fr%residual_evaluations
         if (size(fr%update_norm) > 0) res%update_norm = fr%update_norm(size(fr%update_norm))
         if (size(fr%step_norm) > 0) res%step_norm = fr%step_norm(size(fr%step_norm))
         if (size(fr%residual_norm) > 0) res%residual_norm = fr%residual_norm(size(fr%residual_norm))
         call copy_history(fr%update_norm, update_history)
         call copy_history(fr%step_norm, step_history)
         call copy_history(fr%residual_norm, residual_history)
-    end function bandsolver_f_newton
+    end function bandsolver_f_newton_ex
 
     subroutine copy_history(h, dst)
         real(c_double), intent(in) :: h(:)
@@ -276,13 +317,14 @@ contains
         real(c_double), pointer :: cf(:,:)
         integer(c_long), pointer :: ev
 
-        res = c_newton_result(BAND_INVALID_ARGUMENT, 0, 0, 0, 0, 0, 0)
+        res = c_newton_result(BAND_INVALID_ARGUMENT, 0, 0, 0, 0, 0, 0, 0, 0, 0)
         status = BAND_INVALID_ARGUMENT
         if (n < 1 .or. nj < 3 .or. .not. c_associated(residual)) return
         prob%cres = residual
         prob%ctx = ctx
         fo = newton_options(opts%rtol, opts%atol, opts%damping, opts%max_iter, opts%pivot, &
-                            opts%require_convergence /= 0, opts%kernel)
+                            opts%require_convergence /= 0, opts%kernel, opts%jacobian_reuse /= 0, &
+                            opts%reuse_max_iter, opts%reuse_contraction)
         cf(1:n,1:nj) => c(1:n*nj)
         call band_newton_fd(prob, n, nj, cf, fo, fr, get_fd_options(fd_opts))
 
@@ -291,6 +333,9 @@ contains
         res%iterations = fr%iterations
         res%converged = merge(1, 0, fr%converged)
         res%fail_node = fr%fail_node
+        res%jacobian_evaluations = fr%jacobian_evaluations
+        res%factorizations = fr%factorizations
+        res%residual_evaluations = fr%residual_evaluations
         if (size(fr%update_norm) > 0) res%update_norm = fr%update_norm(size(fr%update_norm))
         if (size(fr%step_norm) > 0) res%step_norm = fr%step_norm(size(fr%step_norm))
         if (size(fr%residual_norm) > 0) res%residual_norm = fr%residual_norm(size(fr%residual_norm))
@@ -330,5 +375,68 @@ contains
             cm = c_mismatch(m%error, m%node, m%row, m%col, m%user, m%fd)
         end function cm
     end function bandsolver_f_check_jacobian
+
+    !> Factor the block matrix; returns an opaque handle (free with bandsolver_f_factor_free).
+    integer(c_int) function bandsolver_f_factor(n, nj, A, B, D, X, Y, handle, fail_node) &
+            bind(c, name='bandsolver_f_factor') result(status)
+        integer(c_int), value :: n, nj
+        real(c_double), intent(in) :: A(*), B(*), D(*)
+        type(c_ptr), value :: X, Y
+        type(c_ptr), intent(out) :: handle
+        integer(c_int), intent(out) :: fail_node
+        type(band_factorization), pointer :: f
+        real(c_double), allocatable :: Af(:,:,:), Bf(:,:,:), Df(:,:,:)
+        real(c_double), pointer :: Xp(:,:), Yp(:,:)
+        real(c_double) :: Xf(max(n,1),max(n,1)), Yf(max(n,1),max(n,1))
+
+        handle = c_null_ptr
+        fail_node = 0
+        status = BAND_INVALID_ARGUMENT
+        if (n < 1 .or. nj < 3) return
+        allocate(Af(n,n,nj), Bf(n,n,nj), Df(n,n,nj))
+        call to_fortran_blocks(n, nj, A(1:n*n*nj), Af)
+        call to_fortran_blocks(n, nj, B(1:n*n*nj), Bf)
+        call to_fortran_blocks(n, nj, D(1:n*n*nj), Df)
+        Xf = 0; Yf = 0
+        if (c_associated(X)) then
+            call c_f_pointer(X, Xp, [n, n]); Xf = transpose(Xp)
+        end if
+        if (c_associated(Y)) then
+            call c_f_pointer(Y, Yp, [n, n]); Yf = transpose(Yp)
+        end if
+        allocate(f)
+        call band_factor(n, nj, Af, Bf, Df, f, X=Xf, Y=Yf)
+        status = f%status
+        fail_node = f%fail_node
+        handle = c_loc(f)
+    end function bandsolver_f_factor
+
+    integer(c_int) function bandsolver_f_factor_solve(handle, G, dc) bind(c, name='bandsolver_f_factor_solve') &
+            result(status)
+        type(c_ptr), value :: handle
+        real(c_double), intent(in), target :: G(*)
+        real(c_double), intent(out), target :: dc(*)
+        type(band_factorization), pointer :: f
+        real(c_double), pointer :: Gv(:,:), dv(:,:)
+        integer :: fstatus
+        status = BAND_INVALID_ARGUMENT
+        if (.not. c_associated(handle)) return
+        call c_f_pointer(handle, f)
+        if (f%n < 1) then
+            status = f%status; return
+        end if
+        Gv(1:f%n,1:f%nj) => G(1:f%n*f%nj)
+        dv(1:f%n,1:f%nj) => dc(1:f%n*f%nj)
+        call band_factor_solve(f, Gv, dv, fstatus)
+        status = fstatus
+    end function bandsolver_f_factor_solve
+
+    subroutine bandsolver_f_factor_free(handle) bind(c, name='bandsolver_f_factor_free')
+        type(c_ptr), value :: handle
+        type(band_factorization), pointer :: f
+        if (.not. c_associated(handle)) return
+        call c_f_pointer(handle, f)
+        deallocate(f)
+    end subroutine bandsolver_f_factor_free
 
 end module bandsolver_capi

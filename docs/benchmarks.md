@@ -132,6 +132,23 @@ The total-time panel compares runs at *different* accuracies, so use the per-ste
 - **One linearized correction per step** gives the *same accuracy* as full Newton on this mildly nonlinear problem, at 2.7× lower cost. This is not guaranteed for strongly nonlinear kinetics: check it by comparing against a converged-Newton run, as done here.
 - **Fixed step size and second order** are what lose at tight tolerances. For the same error, adaptive order-5 BDF needs about 2–3.5× fewer steps at ~1e-5, and 10–14× fewer at ~1e-7.
 
+### Jacobian reuse option (modified Newton)
+
+The option is `jacobian_reuse=True`, with `reuse_max_iter` (default 5) and `reuse_contraction` (default 0.5); an optional `residual` callback lets reuse iterations skip building the blocks. The Newton driver factors the Jacobian once, using the new factor/solve split (`bs.factor`), and reuses it while the updates contract. After factoring, a re-solve is 2–12× cheaper than a one-shot solve (n = 1–30, nj = 1000).
+
+| setting (nj = 81, BDF2) | full Newton | Jacobian reuse (within each step) | 1 Newton iteration/step |
+|---|---|---|---|
+| Δt = 0.01: error / time | 7.4e-6 / 91 ms | 7.4e-6 / 82 ms | 7.4e-6 / 34 ms |
+| Δt = 0.002: error / time | 2.9e-7 / 416 ms | 2.9e-7 / 364 ms | 2.9e-7 / 171 ms |
+| cost per step, nj = 41 / 1281 | 160 / 662 µs | 140 / 546 µs | 64 / 242 µs |
+
+Within a single time step, reuse saves **12–18%**. Each step needs only about 3 Newton iterations and its Newton tolerance is very tight (rtol = 1e-10), so the cost per iteration of evaluating the residual in Python dominates. Larger savings need the factorization carried **across time steps** and a Newton tolerance matched to the step's accuracy. Both are the job of the adaptive integrator (next).
+
+On static nonlinear problems the effect is clearer, e.g. the n = 3, nj = 40 test problem:
+- **full Newton:** 9 iterations with 9 factorizations;
+- **with reuse:** 12 iterations but only 4 factorizations;
+- **with finite-difference Jacobians:** reuse iterations cost 1 residual evaluation instead of 3n + 1 = 10 (26 vs about 50 evaluations in the Fortran test).
+
 ## Conclusions
 
 1. As a **linear kernel**, BAND is the best of the options tested for 1-D block-banded systems: faster, and much leaner in memory.
