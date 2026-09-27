@@ -70,7 +70,7 @@ Converting the blocks into each library's input format is **excluded** from the 
 
 The option is `kernel="fast"` (default) or `kernel="reference"` (Fortran backend; `KERNEL_FAST` / `KERNEL_REFERENCE` in Fortran and C).
 - **What the fast kernel changes:** it runs the partial-pivot block updates, the Gauss–Jordan elimination and the back substitution column by column, which is contiguous in Fortran.
-- **Accuracy:** each matrix entry still accumulates in the same order, so the two kernels give **bit-identical results**, checked by tests.
+- **Accuracy:** each matrix entry still accumulates in the same order, so with gfortran the two kernels give **bit-identical results**, checked by tests. Other compilers may vectorise or fuse the two loop forms differently; with Intel ifx the tests require agreement to rounding (≤ 16 ε relative) instead, and the library is compiled with Intel's precise FP model.
 - **Small blocks:** for blocks smaller than 4×4, the column loops are too short to pay off, so the fast kernel uses the reference loop order there.
 - **Legacy mode:** the legacy pivot mode always uses the reference loops.
 
