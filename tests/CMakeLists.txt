@@ -1,0 +1,37 @@
+add_library(band_test_utils STATIC fortran/band_test_utils.f90)
+
+function(band_fortran_test name)
+  add_executable(${name} fortran/${name}.f90)
+  target_link_libraries(${name} PRIVATE band_test_utils ${ARGN})
+  add_test(NAME ${name} COMMAND ${name})
+endfunction()
+
+band_fortran_test(test_kernel bandsolver_f)
+
+if(EXISTS "${BANDSOLVER_LEGACY_DIR}/ZnMn02_v8_MATINV_BAND_L1983-2100.f95")
+  message(STATUS "bandsolver: legacy oracle found at ${BANDSOLVER_LEGACY_DIR}; legacy comparison tests enabled")
+  add_subdirectory(${BANDSOLVER_LEGACY_DIR} ${CMAKE_BINARY_DIR}/legacy_oracle)
+  foreach(name test_legacy_oracle test_kernel_legacy)
+    add_executable(${name} fortran/legacy/${name}.f90)
+    target_link_libraries(${name} PRIVATE band_test_utils band_legacy_oracle bandsolver_f)
+    add_test(NAME ${name} COMMAND ${name})
+  endforeach()
+else()
+  message(STATUS "bandsolver: legacy oracle not found; legacy comparison tests skipped")
+endif()
+band_fortran_test(test_newton bandsolver_f)
+
+add_executable(test_capi c/test_capi.c)
+target_link_libraries(test_capi PRIVATE bandsolver_f m)
+set_target_properties(test_capi PROPERTIES LINKER_LANGUAGE Fortran)
+add_test(NAME test_capi COMMAND test_capi)
+
+add_executable(test_band_cpp cpp/test_band.cpp)
+target_link_libraries(test_band_cpp PRIVATE bandsolver_cpp bandsolver_f)
+set_target_properties(test_band_cpp PROPERTIES LINKER_LANGUAGE CXX)
+add_test(NAME test_band_cpp COMMAND test_band_cpp)
+
+add_executable(test_newton_cpp cpp/test_newton_cpp.cpp)
+target_link_libraries(test_newton_cpp PRIVATE bandsolver_cpp bandsolver_f)
+set_target_properties(test_newton_cpp PROPERTIES LINKER_LANGUAGE CXX)
+add_test(NAME test_newton_cpp COMMAND test_newton_cpp)

@@ -1,0 +1,31 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "pybind11>=2.12"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "bandsolver"
+version = "0.1.0"
+description = "Newman BAND block-tridiagonal solver with C++ and Fortran backends"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [{ name = "John Bernard" }]
+dependencies = ["numpy>=1.22"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.scikit-build]
+wheel.packages = ["python/bandsolver"]
+# Never ship the private archival oracle, even if a copy is placed inside the tree.
+sdist.exclude = ["legacy/", "bandsolver-legacy-oracle/", "build*/", ".venv/", "TRACK1_LOOP.md", "*.log", "dist/"]
+cmake.build-type = "Release"
+
+[tool.scikit-build.cmake.define]
+BANDSOLVER_BUILD_TESTS = "OFF"
+BANDSOLVER_BUILD_PYTHON = "ON"
+BANDSOLVER_BUILD_EXAMPLES = "OFF"
+
+[tool.pytest.ini_options]
+testpaths = ["tests/python"]

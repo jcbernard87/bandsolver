@@ -1,0 +1,8 @@
+add_executable(fortran_quickstart fortran_quickstart.f90)
+target_link_libraries(fortran_quickstart PRIVATE bandsolver_f)
+add_executable(cpp_quickstart cpp_quickstart.cpp)
+target_link_libraries(cpp_quickstart PRIVATE bandsolver_cpp)
+if(BANDSOLVER_BUILD_TESTS)
+  add_test(NAME example_fortran_quickstart COMMAND fortran_quickstart)
+  add_test(NAME example_cpp_quickstart COMMAND cpp_quickstart)
+endif()

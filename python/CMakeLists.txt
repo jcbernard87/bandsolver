@@ -1,0 +1,6 @@
+find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
+find_package(pybind11 CONFIG REQUIRED)
+pybind11_add_module(_core bindings.cpp)
+target_link_libraries(_core PRIVATE bandsolver_cpp bandsolver_f)
+set_target_properties(_core PROPERTIES LINKER_LANGUAGE CXX)
+install(TARGETS _core DESTINATION bandsolver)
