@@ -121,7 +121,7 @@ Spec: [`docs/specs/2026-09-27-benchmarks-design.md`](docs/specs/2026-09-27-bench
 - [x] B2 Layer 1: `linear.py` (BAND py/native, LAPACK band, SuperLU, dense), backward-error check, sweep → `results/linear.csv`, plots.
 - [x] B3 Layer 2 models: bandsolver BE/BDF2, IDA DAE (band), SciPy BDF reduced ODE; verify all agree on the same discrete solution.
 - [x] B4 Layer 2 sweeps: work-precision + mesh scaling → `results/transient*.csv`, plots.
-- [ ] B5 `docs/benchmarks.md`, notebook 05 (reads the CSVs), README link, CI smoke test; PR, CI, merge.
+- [x] B5 `docs/benchmarks.md`, notebook 05 (reads the CSVs), README link, CI smoke test; PR, CI, merge.
 
 ### Checkpoints
 - **2026-09-27 — B0.** Author approved layers 1–2 (PyBaMM deferred). scipy 1.18.1 and scikit-sundae 1.1.3 installed in `.venv`. The IDA API (band solver, algebraic_idx, calc_initcond, nfev/njev) was checked. Spec written. Next: B1.
@@ -151,3 +151,4 @@ Spec: [`docs/specs/2026-09-27-benchmarks-design.md`](docs/specs/2026-09-27-bench
 
   Next: B5.
 - **2026-09-27 — B5 (in progress).** Wrote `docs/benchmarks.md` (summary, methods, results tables, where the time goes, conclusions, fairness and limitations, reproduction commands) and `notebooks/05_benchmarks.ipynb` (reads the saved CSVs). Added README "Performance" and tutorial links, a CHANGELOG entry, and a CI benchmark smoke test (native harness via CTest; `linear.py --quick` and `transient.py --quick` on Linux and macOS). Corrected an overstatement before publishing: linearized BDF2 has the cheapest step *up to about 1000 nodes* and ties with IDA at 1281. Local tests: notebooks 5/5 and the README test pass. PR next.
+- **2026-09-27 — B5 done.** On PR #7's first CI run, the Linux aarch64 benchmark smoke step failed: scikit-sundae 1.1.3 has no wheel there, and the source build needs SUNDIALS. Fixed so that CI installs scikit-sundae only as a binary; the `--quick` run skips the IDA cases without it, and the full run requires it and exits with a clear message. Both paths were tested locally in an environment without scikit-sundae. The rerun passed on all 5 platforms. Merged. **Benchmark loop complete.**
