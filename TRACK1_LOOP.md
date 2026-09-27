@@ -118,7 +118,7 @@ Spec: [`docs/specs/2026-09-27-fd-jacobian-design.md`](docs/specs/2026-09-27-fd-j
 ## Benchmark loop: solver comparison, layers 1–2 (branch `benchmarks`)
 Spec: [`docs/specs/2026-09-27-benchmarks-design.md`](docs/specs/2026-09-27-benchmarks-design.md). Work on the branch and merge via a PR. Benchmarks run locally; CI only smoke-tests the scripts.
 - [x] B1 Harness: `benchmarks/` layout, pinned `requirements.txt`, `env.py`, native C++ timing harness + CMake option; smoke test.
-- [ ] B2 Layer 1: `linear.py` (BAND py/native, LAPACK band, SuperLU, dense), backward-error check, sweep → `results/linear.csv`, plots.
+- [x] B2 Layer 1: `linear.py` (BAND py/native, LAPACK band, SuperLU, dense), backward-error check, sweep → `results/linear.csv`, plots.
 - [ ] B3 Layer 2 models: bandsolver BE/BDF2, IDA DAE (band), SciPy BDF reduced ODE; verify all agree on the same discrete solution.
 - [ ] B4 Layer 2 sweeps: work-precision + mesh scaling → `results/transient*.csv`, plots.
 - [ ] B5 `docs/benchmarks.md`, notebook 05 (reads the CSVs), README link, CI smoke test; PR, CI, merge.
@@ -126,3 +126,11 @@ Spec: [`docs/specs/2026-09-27-benchmarks-design.md`](docs/specs/2026-09-27-bench
 ### Checkpoints
 - **2026-09-27 — B0.** Author approved layers 1–2 (PyBaMM deferred). scipy 1.18.1 and scikit-sundae 1.1.3 installed in `.venv`. The IDA API (band solver, algebraic_idx, calc_initcond, nfev/njev) was checked. Spec written. Next: B1.
 - **2026-09-27 — B1.** Added `benchmarks/`: `requirements.txt` (pins numpy 2.5.3, scipy 1.18.1, scikit-sundae 1.1.3, matplotlib 3.11.2), `env.py` (platform, CPU, compilers, versions, git commit to `results/env.json`), and `native_bench.cpp`. The native harness times the C++ and Fortran cores with no Python, taking the median of ≥5 repeats and ≥0.2 s per point; its CMake option `BANDSOLVER_BUILD_BENCHMARKS` is OFF by default, and a `--quick` smoke test is registered with CTest. Smoke run on an Apple M1 Pro: n=1, nj=25 takes 1.1 µs (C++) and 2.3 µs (Fortran); n=3, nj=50 takes 8.7 and 13.2 µs; backward error ≤ 1.5e-16. `benchmarks/results/` is excluded from the sdist. Next: B2.
+- **2026-09-27 — B2.** `benchmarks/linear.py` (+ `plot.py`) ran the full sweep: n ∈ {1,3,5,10,20,30} × nj ∈ {25…2000} on an M1 Pro, 322 measurements in 80 s, all with backward error ≤ 8.7e-16. Results: `results/linear.csv`, `linear_time.png`, `linear_speedup.png`.
+  - **BAND C++ (from Python) is fastest at every size.** It beats LAPACK banded (dgbsv, bandwidth widened to 3n−1 by X/Y) by 1.6–5.8× (median 2.4×) and SciPy SuperLU by 2.4–12.4× (median 4.8× natural ordering, 6.7× COLAMD). Dense only wins nowhere past about N = 50.
+  - Factor storage at n=30, nj=2000: BAND 14.9 MB, LAPACK band 128.6 MB, SuperLU 65.5 MB.
+  - Python-call overhead is about 5 µs fixed: 4.9× on n=1, nj=25, but ≤ 1.18× from nj ≈ 200.
+  - Scaling is linear in nj (×2.05 per doubling); n 10→30 costs ×13.8 (below n³ = 27, a small-block efficiency effect).
+  - **Finding:** the Fortran core is 1.5–2.2× slower than C++ *natively*, not just because of the C-ABI transposes. Its loops follow the legacy row-major order, which is cache-unfriendly in column-major Fortran. **Follow-up TODO:** optimise the partial-pivot path's loop order (legacy mode must keep its operation order).
+
+  Next: B3.
