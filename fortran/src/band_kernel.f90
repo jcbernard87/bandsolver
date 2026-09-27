@@ -44,15 +44,16 @@ contains
         real(dp) :: Xp(n,n), Yw(n,n), Am(n,n), Bm(n,n), Gm(n), rel
         integer :: piv, j, i, k, l, m, np1
 
-        dc = 0
         if (present(fail_node)) fail_node = 0
         if (present(min_rel_pivot)) min_rel_pivot = huge(1.0_dp)
         piv = PIVOT_PARTIAL
         if (present(pivot)) piv = pivot
+        ! Validate before touching dc: with invalid sizes its extent is not trustworthy.
         if (n < 1 .or. nj < 3 .or. (piv /= PIVOT_PARTIAL .and. piv /= PIVOT_LEGACY)) then
             status = BAND_INVALID_ARGUMENT
             return
         end if
+        dc = 0
         Xp = 0; Yw = 0
         if (present(X)) Xp = X
         if (present(Y)) Yw = Y

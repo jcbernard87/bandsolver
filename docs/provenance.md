@@ -2,7 +2,7 @@
 
 ## Origin
 
-- **Algorithm:** J. Newman's BAND method for coupled ordinary differential equations. It is published as Appendix C of J. Newman and K. E. Thomas-Alyea, *Electrochemical Systems*, 3rd ed. (Wiley-Interscience, 2004; ISBN 0-471-47756-7), Appendix C, printed pp. 611–622. The edition was confirmed by the author and matches the title and copyright pages of the supplied PDF. The book is © 2004 John Wiley & Sons, all rights reserved. Its §C.4 offers the Fortran 77 subroutines `BAND(J)` and `MATINV` for readers to call from their own programs, but grants no redistribution license. That appendix includes a Fortran listing of `BAND(J)` and `MATINV`. The method goes back to Newman's earlier work (Newman, *Ind. Eng. Chem. Fundam.* 7, 514 (1968)). **Verify the 1968 citation against the original before publication.**
+- **Algorithm:** J. Newman's BAND method for coupled ordinary differential equations. It is published as Appendix C of J. Newman and K. E. Thomas-Alyea, *Electrochemical Systems*, 3rd ed. (Wiley-Interscience, 2004; ISBN 0-471-47756-7), Appendix C, printed pp. 611–622. The edition was confirmed by the author and matches the title and copyright pages of the supplied PDF. The book is © 2004 John Wiley & Sons, all rights reserved. Its §C.4 offers the Fortran 77 subroutines `BAND(J)` and `MATINV` for readers to call from their own programs, but grants no redistribution license. That appendix includes a Fortran listing of `BAND(J)` and `MATINV`. The method goes back to Newman's earlier work (J. Newman, "Numerical Solution of Coupled, Ordinary Differential Equations," *Ind. Eng. Chem. Fundam.* 7(3), 514–517 (1968), doi:10.1021/i160027a025; verified against Crossref).
 - **Archival implementation:** the author's PhD-era battery-model Fortran sources, which are private. Their shared `BAND`/`MATINV` text was inventoried and compared with Appendix C in the author's private source audit.
 - **This library:** a new implementation (Fortran 2008, C++17 and Python). It has explicit interfaces, no global state, and status reporting. The elimination and the legacy pivot rule deliberately follow the operation order of the archival and Appendix C routines, so that historical results can be reproduced.
 
@@ -25,8 +25,8 @@ Facts recorded from the oracle, which contain no code:
 1. **License — decided 2026-09-26: BSD-3-Clause** (`LICENSE`). It covers this repository's own code: the reimplementation, tests, examples and docs. The BAND algorithm itself is a published method and is cited, not licensed.
 2. **Shipping the legacy extract — decided 2026-09-26: not shipped.** See above. To publish it later would need permission from Wiley (permreq@wiley.com).
 3. **Institutional rights — resolved 2026-09-26 by the author.** Columbia is not involved in this library's development. The underlying algorithm is Newman's published method, and this implementation is the author's own work, so no institutional claim applies. The author approved public release.
-4. **Attribution and citation text**, and whether to add `CITATION.cff` or a Zenodo DOI at release.
-5. **Package name** on PyPI/conda: `bandsolver` has not been checked for availability.
+4. **Citation:** `CITATION.cff` and `.zenodo.json` were added on 2026-09-26. A Zenodo DOI requires the author to enable the repository on zenodo.org before the next release.
+5. **PyPI:** deferred by the author (2026-09-26).
 6. **Publication target**, for example JOSS or an electrochemistry-methods venue, and the scope of the accompanying paper. Stage 7 benchmarks and Track 2 model reproductions would support that paper.
 
 Published on GitHub as version 0.1.0 on 2026-09-26, with the author's approval. It has not been uploaded to PyPI.

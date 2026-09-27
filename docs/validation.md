@@ -119,10 +119,23 @@ Across these differently optimized builds, the C++ and Fortran results differ by
 
 The Fortran backend is probably slower because its C interface transposes the blocks and copies them on entry. That was not measured separately. Time scales linearly in nj and roughly as n³.
 
-## 5. Not covered
+## 5. Continuous integration
 
-- Other compilers and platforms (Linux, Intel, Windows) and other optimization levels. The bit-identical agreements above are specific to this toolchain; the tests use tolerances rather than exact equality.
-- The Python extension links Homebrew's dynamic libgfortran, so a portable wheel has not been built or tested.
+`.github/workflows/ci.yml` runs the CMake tests, and on Unix the Python tests, for every push and pull request:
+
+| Platform | Compilers |
+|---|---|
+| Linux x86_64 and aarch64 (ubuntu-24.04) | gfortran 14 |
+| macOS arm64 (macos-14) and x86_64 (macos-15-intel) | gfortran 14, Apple clang |
+| Windows x86_64 (windows-2025) | Intel ifx 2025.3, MSVC |
+
+`.github/workflows/wheels.yml` uses cibuildwheel to build wheels for CPython 3.9–3.15, including the free-threaded builds, on the same five platforms. Each wheel has its Fortran runtime bundled in (auditwheel, delocate or delvewheel), and the full pytest suite runs against the installed wheel. On a `v*` tag, the wheels and sdist are attached to the GitHub release.
+
+CI found one test defect that the macOS runs had missed: an out-of-bounds call in `test_kernel`, which glibc detects and macOS tolerated. It was fixed on 2026-09-26, and `band_solve` now validates its arguments before writing its output.
+
+## 6. Not covered
+
+- The bit-identical agreements in §1 were measured on the reference toolchain. On the other CI toolchains the tests pass within their tolerances, but bit-level agreement is not claimed there.
 - No performance benchmark or comparison against LAPACK band, KLU, SUNDIALS, etc. That is Stage 7 of the plan.
 - Very ill-conditioned or near-singular systems beyond the threshold tests: `min_rel_pivot` is reported, but no conditioning estimate is made.
 - The archival battery models are not validated here (Track 2).

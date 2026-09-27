@@ -33,9 +33,15 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ctest --test-dir build
 
-# Python package (builds both backends into one extension)
-python -m pip install .            # or: pip install . --no-build-isolation
+# Python package from source (builds both backends into one extension)
+python -m pip install .
 python -m pytest
+```
+
+**Prebuilt wheels** for Linux (x86_64, aarch64), macOS (arm64, x86_64) and Windows (x86_64) are attached to each [GitHub release](https://github.com/jcbernard87/bandsolver/releases). They cover CPython 3.9 and later and bundle the Fortran runtime, so no compiler is needed:
+
+```sh
+pip install bandsolver-<version>-<python>-<platform>.whl
 ```
 
 ## Quickstart
@@ -66,6 +72,10 @@ print(r.converged, r.iterations, r.c[:, 0])
 
 More complete examples are in [examples/](examples): a nonlinear BVP, a coupled 3-unknown differential-algebraic system, transient diffusion with implicit Euler, and second-order Neumann boundaries through `X`/`Y`. Each reports its observed convergence order.
 
+## Citing
+
+See [CITATION.cff](CITATION.cff); GitHub's "Cite this repository" button uses it. Please also cite Newman's method: J. Newman, *Ind. Eng. Chem. Fundam.* 7, 514 (1968), and *Electrochemical Systems*, 3rd ed., Appendix C.
+
 ## Documentation
 
 - [docs/math.md](docs/math.md): formulation, elimination algorithm, pivoting, and Newton convergence.
@@ -84,7 +94,6 @@ BSD 3-Clause; see [LICENSE](LICENSE). If you use bandsolver in published work, p
 ## Status and limitations
 
 - Version 0.1.0 is the first public release; the source is on GitHub. It is not yet on PyPI.
-- The Python extension links the compiler's Fortran runtime (libgfortran) dynamically. Portable wheels have not been built.
-- Tested only on macOS arm64. The tests use tolerances rather than exact equality, so other toolchains should pass, but they have not been tried.
+- CI builds and tests on every push: Linux x86_64/aarch64 (gfortran 14), macOS arm64/x86_64 (gfortran 14 + Apple clang), and Windows x86_64 (Intel ifx 2025 + MSVC).
 - Time integration is left to user code (see `examples/transient_diffusion.py`). No adaptive step control or DAE integrator is included.
 
