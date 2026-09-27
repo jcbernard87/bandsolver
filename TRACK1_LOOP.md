@@ -120,7 +120,7 @@ Spec: [`docs/specs/2026-09-27-benchmarks-design.md`](docs/specs/2026-09-27-bench
 - [x] B1 Harness: `benchmarks/` layout, pinned `requirements.txt`, `env.py`, native C++ timing harness + CMake option; smoke test.
 - [x] B2 Layer 1: `linear.py` (BAND py/native, LAPACK band, SuperLU, dense), backward-error check, sweep → `results/linear.csv`, plots.
 - [x] B3 Layer 2 models: bandsolver BE/BDF2, IDA DAE (band), SciPy BDF reduced ODE; verify all agree on the same discrete solution.
-- [ ] B4 Layer 2 sweeps: work-precision + mesh scaling → `results/transient*.csv`, plots.
+- [x] B4 Layer 2 sweeps: work-precision + mesh scaling → `results/transient*.csv`, plots.
 - [ ] B5 `docs/benchmarks.md`, notebook 05 (reads the CSVs), README link, CI smoke test; PR, CI, merge.
 
 ### Checkpoints
@@ -142,3 +142,11 @@ Spec: [`docs/specs/2026-09-27-benchmarks-design.md`](docs/specs/2026-09-27-bench
   **Consistency against an IDA rtol=1e-12 reference:** IDA at 1e-10 differs by 2.3e-8 mol/m³, SciPy at 1e-10 by 6.7e-8, bandsolver BDF2 at Δt=1e-4 by 1.3e-9, and BE at Δt=1e-4 by 1.3e-5 (its O(Δt) error). All stacks share one discrete solution. The DAE and the reduced ODE are equivalent, as designed.
 
   Early signal: for tight accuracy, fixed-step BE/BDF2 needs 50k steps (7 s), where adaptive IDA/SciPy need 365–710 steps (0.05 s). Next: B4 (work-precision and mesh sweeps).
+- **2026-09-27 — B4.** `transient.py` now has the consistency check, work-precision (nj=81) and mesh sweeps (nj 41–1281); results are in `results/transient_wp.csv`, `transient_mesh.csv`, `transient_work_precision.png` and `transient_mesh.png`. The full run takes about 25 s.
+  - **Per-step cost:** bandsolver full Newton runs 2.6–2.8 iterations/step; each iteration spends 51 µs in the Python fill and 10 µs in BAND at nj=81 (94/113 µs at nj=1281). IDA averages 1.3 residual evaluations/step and reuses its Jacobian (22 Jacobians in 143 steps).
+  - **Added variant, BDF2 with 1 Newton iteration/step** (the archival linearized usage): same accuracy as full Newton on this mildly nonlinear problem, e.g. 7.37e-6 at Δt=0.01, 2.7× cheaper. Its per-step cost is 64–242 µs for nj 41–1281, below IDA (90–238 µs) and SciPy (106–326 µs) at every mesh.
+  - **Work-precision crossover** near an error of 1e-4 mol/m³ (1e-6 relative). For looser targets, linearized BDF2 is fastest: 8.1e-4 in 3.4 ms, vs SciPy 5.9e-4 in 8.3 ms and IDA 3.0e-3 in 7.6 ms. For tighter targets, adaptive order-5 BDF wins: IDA reaches 2.3e-8 in 51 ms, where BDF2 needs 343 ms for 7.3e-8.
+  - Backward Euler is dominated everywhere (first order).
+  - Conclusion: BAND is the faster kernel per step, and the remaining gap is time-integration strategy (adaptive step/order, Jacobian reuse), not linear algebra. Follow-up idea: adaptive BDF stepping, or use BAND as IDA's linear solver.
+
+  Next: B5.
