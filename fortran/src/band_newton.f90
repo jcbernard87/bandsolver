@@ -39,6 +39,7 @@ module bandsolver_newton
         integer :: max_iter = 50
         integer :: pivot = PIVOT_PARTIAL
         logical :: require_convergence = .true.
+        integer :: kernel = KERNEL_FAST             !< Fortran loop organisation (see bandsolver_kernel)
     end type newton_options
 
     type :: newton_result
@@ -82,7 +83,7 @@ contains
                 return
             end if
             res%residual_norm = [res%residual_norm, maxval(abs(G))]
-            call band_solve(n, nj, A, B, D, G, dc, res%status, X=X, Y=Y, pivot=opts%pivot, &
+            call band_solve(n, nj, A, B, D, G, dc, res%status, X=X, Y=Y, pivot=opts%pivot, kernel=opts%kernel, &
                             fail_node=res%fail_node)
             if (res%status /= BAND_OK) return
             c = c + opts%damping*dc

@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- **Fortran fast kernel** (`kernel` option, default `fast`): column-major loops in the partial-pivot path, bit-identical to the archival loop order (`reference`).
+  - The Fortran core is now at parity with C++ for blocks n ≥ 5 when called from Fortran, and within 1.06–1.34× through the C ABI (previously 1.5–2.2×).
+  - C ABI: `bandsolver_f_solve_kernel` was added, and **`bandsolver_newton_options` gains a trailing `kernel` field**. C callers that initialise it with `bandsolver_f_default_options` need no change.
 - **Solver comparison (layers 1–2):**
   - `benchmarks/` holds pinned requirements, an environment recorder, the Python scripts and a native C++ timing harness (`-DBANDSOLVER_BUILD_BENCHMARKS=ON`).
   - `docs/benchmarks.md` has the results, method and caveats.

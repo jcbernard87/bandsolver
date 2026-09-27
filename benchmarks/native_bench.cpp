@@ -80,6 +80,12 @@ int main(int argc, char** argv) {
                                    s.Y().data(), 0, dc.data(), &fnode, &mrp);
             }, min_total, 5, reps, med, mn);
             std::printf("band_fortran_native,%d,%d,%d,%.6e,%.6e,%.3e\n", n, nj, reps, med, mn, backward_error(s, dc));
+            time_it([&] {
+                bandsolver_f_solve_kernel(n, nj, s.A().data(), s.B().data(), s.D().data(), s.G().data(), s.X().data(),
+                                          s.Y().data(), 0, BANDSOLVER_KERNEL_REFERENCE, dc.data(), &fnode, &mrp);
+            }, min_total, 5, reps, med, mn);
+            std::printf("band_fortran_reference_native,%d,%d,%d,%.6e,%.6e,%.3e\n", n, nj, reps, med, mn,
+                        backward_error(s, dc));
             std::fflush(stdout);
         }
     return 0;

@@ -22,7 +22,8 @@ plt.rcParams.update({
 LINEAR_SERIES = [  # (method, label, colour, linestyle) in fixed order
     ("band_cpp_py", "BAND C++ (from Python)", BLUE, "-"),
     ("band_cpp_native", "BAND C++ (native)", BLUE, "--"),
-    ("band_fortran_py", "BAND Fortran (from Python)", ORANGE, "-"),
+    ("band_fortran_py", "BAND Fortran, fast kernel (from Python)", ORANGE, "-"),
+    ("band_fortran_reference_py", "BAND Fortran, reference loops (from Python)", ORANGE, "--"),
     ("lapack_band", "LAPACK banded (dgbsv)", AQUA, "-"),
     ("superlu_natural", "SciPy SuperLU", YELLOW, "-"),
     ("dense_lapack", "dense LAPACK (dgesv)", MAGENTA, "-"),

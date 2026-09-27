@@ -22,6 +22,10 @@ enum bandsolver_status {
 
 enum bandsolver_pivot { BANDSOLVER_PIVOT_PARTIAL = 0, BANDSOLVER_PIVOT_LEGACY = 1 };
 
+/* Fortran loop organisation: FAST (default, column-major loops) and REFERENCE (archival
+ * row-wise loops) give bit-identical results; REFERENCE exists for comparison/benchmarks. */
+enum bandsolver_kernel { BANDSOLVER_KERNEL_FAST = 0, BANDSOLVER_KERNEL_REFERENCE = 1 };
+
 /* Fill callback: evaluate Jacobian blocks and G = -F(c) at state c. Output arrays arrive
  * zeroed. Return nonzero to abort with BANDSOLVER_CALLBACK_ERROR. */
 typedef int (*bandsolver_fill_fn)(int n, int nj, const double *c, double *A, double *B,
@@ -34,6 +38,7 @@ typedef struct {
     int max_iter;              /* default 50 */
     int pivot;                 /* enum bandsolver_pivot */
     int require_convergence;   /* default 1; 0 with max_iter=1 = archival one-step use */
+    int kernel;                /* enum bandsolver_kernel, default FAST (added in 0.1.2) */
 } bandsolver_newton_options;
 
 typedef struct {
@@ -51,6 +56,11 @@ void bandsolver_f_default_options(bandsolver_newton_options *opts);
 int bandsolver_f_solve(int n, int nj, const double *A, const double *B, const double *D,
                        const double *G, const double *X, const double *Y, int pivot,
                        double *dc, int *fail_node, double *min_rel_pivot);
+
+/* As bandsolver_f_solve, with an explicit kernel (enum bandsolver_kernel). */
+int bandsolver_f_solve_kernel(int n, int nj, const double *A, const double *B, const double *D,
+                              const double *G, const double *X, const double *Y, int pivot, int kernel,
+                              double *dc, int *fail_node, double *min_rel_pivot);
 
 /* c is updated in place. Histories (length >= max_iter) may be NULL. */
 int bandsolver_f_newton(int n, int nj, bandsolver_fill_fn fill, void *ctx, double *c,

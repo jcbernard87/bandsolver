@@ -155,7 +155,7 @@ Spec: [`docs/specs/2026-09-27-benchmarks-design.md`](docs/specs/2026-09-27-bench
 
 ## Performance loop: fast Fortran kernel, Jacobian reuse, adaptive integrator
 Spec: [`docs/specs/2026-09-27-performance-options-design.md`](docs/specs/2026-09-27-performance-options-design.md). There are three PRs (A, B, C), each with CI and a benchmark update. Every option can be switched on and off, and each is benchmarked against the current standard.
-- [ ] P1 (PR A) Fortran fast kernel + `kernel` option (Fortran, C ABI, Python); bit-identity tests; Layer 1 benchmark reference vs fast; PR, CI, merge.
+- [x] P1 (PR A) Fortran fast kernel + `kernel` option (Fortran, C ABI, Python); bit-identity tests; Layer 1 benchmark reference vs fast; PR, CI, merge.
 - [ ] P2 (PR B) C++ factor/solve (`Factorization`) + tests.
 - [ ] P3 (PR B) Fortran factor/solve + C ABI + Python `bs.factor`; tests incl. cross-check.
 - [ ] P4 (PR B) Newton `jacobian_reuse` option + residual-only callback (C++, Fortran, Python); tests; Layer 2 reuse rows; PR, CI, merge.
@@ -166,3 +166,9 @@ Spec: [`docs/specs/2026-09-27-performance-options-design.md`](docs/specs/2026-09
 
 ### Checkpoints
 - **2026-09-27 — P0.** The author approved the design. Spec written; branch `fortran-fast-kernel`. Next: P1.
+- **2026-09-27 — P1.** Fortran fast kernel with the `kernel` option (Fortran, C ABI `bandsolver_f_solve_kernel` plus a trailing `kernel` field in the newton options, Python `kernel=`).
+  - **Bit-identical to the reference loops:** 0 mismatches in 40 sweep cases in Fortran, plus the Python tests.
+  - **First attempt:** the fast kernel was 5–22% *slower* at n ≤ 3. Fixes: the fast path falls back to the reference loop order below n = 4, and explicit-loop pivot search replaces maxval/maxloc temporaries (used in both paths; still bit-identical).
+  - **Result:** fast is never slower. Reference/fast is 1.00 at n ≤ 3 and 1.1–1.48× for n ≥ 5 (n=20 ~1.0–1.08).
+  - **Against C++:** the Fortran core called directly is at parity for n ≥ 5 (0.96–1.14×), versus 1.5–2.2× before. Through the C ABI it's 1.06–1.34×. At n ≤ 3 it's still 1.3–2.2× (a per-node fixed cost; follow-up).
+  - Layer 1 re-run: 406 rows, backward error ≤ 8.7e-16. docs/benchmarks, api.md and the CHANGELOG are updated. ctest 14/14, pytest 114.

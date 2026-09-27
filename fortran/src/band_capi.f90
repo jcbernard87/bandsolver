@@ -10,7 +10,7 @@ module bandsolver_capi
 
     type, bind(c) :: c_newton_options
         real(c_double) :: rtol, atol, damping
-        integer(c_int) :: max_iter, pivot, require_convergence
+        integer(c_int) :: max_iter, pivot, require_convergence, kernel
     end type c_newton_options
 
     type, bind(c) :: c_newton_result
@@ -84,12 +84,24 @@ contains
     subroutine bandsolver_f_default_options(opts) bind(c, name='bandsolver_f_default_options')
         type(c_newton_options), intent(out) :: opts
         type(newton_options) :: d
-        opts = c_newton_options(d%rtol, d%atol, d%damping, d%max_iter, d%pivot, 1)
+        opts = c_newton_options(d%rtol, d%atol, d%damping, d%max_iter, d%pivot, 1, d%kernel)
     end subroutine bandsolver_f_default_options
 
     integer(c_int) function bandsolver_f_solve(n, nj, A, B, D, G, X, Y, pivot, dc, fail_node, &
             min_rel_pivot) bind(c, name='bandsolver_f_solve') result(status)
         integer(c_int), value :: n, nj, pivot
+        real(c_double), intent(in) :: A(*), B(*), D(*), G(*)
+        type(c_ptr), value :: X, Y
+        real(c_double), intent(out) :: dc(*)
+        integer(c_int), intent(out) :: fail_node
+        real(c_double), intent(out) :: min_rel_pivot
+        status = bandsolver_f_solve_kernel(n, nj, A, B, D, G, X, Y, pivot, int(KERNEL_FAST, c_int), dc, &
+                                           fail_node, min_rel_pivot)
+    end function bandsolver_f_solve
+
+    integer(c_int) function bandsolver_f_solve_kernel(n, nj, A, B, D, G, X, Y, pivot, kernel, dc, fail_node, &
+            min_rel_pivot) bind(c, name='bandsolver_f_solve_kernel') result(status)
+        integer(c_int), value :: n, nj, pivot, kernel
         real(c_double), intent(in) :: A(*), B(*), D(*), G(*)
         type(c_ptr), value :: X, Y
         real(c_double), intent(out) :: dc(*)
@@ -120,10 +132,10 @@ contains
         end if
         allocate(dcf(n,nj))
         call band_solve(n, nj, Af, Bf, Df, reshape(G(1:n*nj), [n, nj]), dcf, status, &
-                        X=Xf, Y=Yf, pivot=pivot, fail_node=fnode, min_rel_pivot=min_rel_pivot)
+                        X=Xf, Y=Yf, pivot=pivot, fail_node=fnode, min_rel_pivot=min_rel_pivot, kernel=kernel)
         dc(1:n*nj) = reshape(dcf, [n*nj])
         fail_node = fnode
-    end function bandsolver_f_solve
+    end function bandsolver_f_solve_kernel
 
     subroutine c_problem_fill(self, n, nj, c, A, B, D, G, X, Y, ierr)
         class(c_problem), intent(inout) :: self
@@ -164,7 +176,7 @@ contains
         prob%ctx = ctx
         allocate(prob%At(n,n,nj), prob%Bt(n,n,nj), prob%Dt(n,n,nj), prob%Xt(n,n), prob%Yt(n,n))
         fo = newton_options(opts%rtol, opts%atol, opts%damping, opts%max_iter, opts%pivot, &
-                            opts%require_convergence /= 0)
+                            opts%require_convergence /= 0, opts%kernel)
         cf(1:n,1:nj) => c(1:n*nj)
         call band_newton(prob, n, nj, cf, fo, fr)
 
@@ -270,7 +282,7 @@ contains
         prob%cres = residual
         prob%ctx = ctx
         fo = newton_options(opts%rtol, opts%atol, opts%damping, opts%max_iter, opts%pivot, &
-                            opts%require_convergence /= 0)
+                            opts%require_convergence /= 0, opts%kernel)
         cf(1:n,1:nj) => c(1:n*nj)
         call band_newton_fd(prob, n, nj, cf, fo, fr, get_fd_options(fd_opts))
 
