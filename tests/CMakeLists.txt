@@ -49,3 +49,7 @@ add_executable(test_fd_cross cpp/test_fd_cross.cpp)
 target_link_libraries(test_fd_cross PRIVATE bandsolver_cpp bandsolver_f)
 set_target_properties(test_fd_cross PROPERTIES LINKER_LANGUAGE CXX)
 add_test(NAME test_fd_cross COMMAND test_fd_cross)
+
+add_executable(test_factor_cpp cpp/test_factor.cpp)
+target_link_libraries(test_factor_cpp PRIVATE bandsolver_cpp)
+add_test(NAME test_factor_cpp COMMAND test_factor_cpp)
