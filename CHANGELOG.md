@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Added
+- **Solver comparison (layers 1–2):**
+  - `benchmarks/` holds pinned requirements, an environment recorder, the Python scripts and a native C++ timing harness (`-DBANDSOLVER_BUILD_BENCHMARKS=ON`).
+  - `docs/benchmarks.md` has the results, method and caveats.
+  - Notebook **5 · Benchmarks** summarises the saved results.
+  - BAND vs LAPACK banded, SuperLU and dense solves; fixed-step BAND vs SUNDIALS IDA and SciPy BDF on the binary-electrolyte DAE.
 - Notebook **4 · Finite differences vs finite volumes**: an electrode/separator diffusion problem with a porosity/diffusivity jump, solved with nodal FD, FD with interface flux matching, and FV. It compares conservation (FV to round-off; nodal FD +8 % salt) and spatial order (FV 2, FD-matched 1, nodal FD 0), shows FV on a graded mesh (38–49× lower error at equal node count), shows FD and FV are identical for smooth single-material problems, and gives a decision guide.
 
 ## 0.1.1 — 2026-09-27

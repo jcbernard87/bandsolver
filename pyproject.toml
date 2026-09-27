@@ -20,7 +20,7 @@ notebooks = ["jupyterlab", "matplotlib"]
 [tool.scikit-build]
 wheel.packages = ["python/bandsolver"]
 # Never ship the private archival oracle, even if a copy is placed inside the tree.
-sdist.exclude = ["legacy/", "bandsolver-legacy-oracle/", "build*/", ".venv/", "TRACK1_LOOP.md", "*.log", "dist/", ".github/", "ci/"]
+sdist.exclude = ["legacy/", "bandsolver-legacy-oracle/", "build*/", ".venv/", "TRACK1_LOOP.md", "*.log", "dist/", ".github/", "ci/", "benchmarks/results/"]
 cmake.build-type = "Release"
 
 [tool.scikit-build.cmake.define]

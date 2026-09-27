@@ -8,6 +8,7 @@ set(CMAKE_Fortran_MODULE_DIRECTORY ${CMAKE_BINARY_DIR}/modules)
 
 option(BANDSOLVER_BUILD_TESTS "Build Fortran/C++ tests (includes the legacy oracle)" ON)
 option(BANDSOLVER_BUILD_EXAMPLES "Build the Fortran/C++ quickstart programs" ON)
+option(BANDSOLVER_BUILD_BENCHMARKS "Build the native benchmark harness (benchmarks/)" OFF)
 option(BANDSOLVER_BUILD_PYTHON "Build the pybind11 extension bandsolver._core" OFF)
 # Private, non-distributed copy of the archival BAND/MATINV used only as a test oracle
 # (see docs/provenance.md). Legacy comparison tests are built only when it is present.
@@ -25,6 +26,9 @@ if(BANDSOLVER_BUILD_PYTHON)
 endif()
 if(BANDSOLVER_BUILD_EXAMPLES)
   add_subdirectory(examples)
+endif()
+if(BANDSOLVER_BUILD_BENCHMARKS)
+  add_subdirectory(benchmarks)
 endif()
 
 if(BANDSOLVER_BUILD_TESTS)

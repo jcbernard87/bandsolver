@@ -41,7 +41,7 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           if [ "$RUNNER_OS" = macOS ]; then export CC=clang CXX=clang++; fi
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_Fortran_COMPILER=${FC:-gfortran}
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_Fortran_COMPILER=${FC:-gfortran} -DBANDSOLVER_BUILD_BENCHMARKS=ON
       - name: Configure (Windows, ifx + MSVC)
         if: runner.os == 'Windows'
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DCMAKE_Fortran_COMPILER=ifx
@@ -55,3 +55,12 @@ jobs:
           if [ "$RUNNER_OS" = macOS ]; then export CC=clang CXX=clang++; fi
           python -m pip install . pytest nbformat nbclient ipykernel matplotlib
           python -m pytest -q
+      - name: Benchmark smoke test (tiny sizes; results are not kept)
+        if: runner.os != 'Windows'
+        run: |
+          # scikit-sundae ships no wheel for Linux aarch64; the smoke run then skips its IDA cases.
+          grep -v scikit-sundae benchmarks/requirements.txt > "$RUNNER_TEMP/req.txt"
+          python -m pip install -r "$RUNNER_TEMP/req.txt"
+          python -m pip install --only-binary=:all: scikit-sundae==1.1.3 || echo "no scikit-sundae wheel for this platform"
+          python benchmarks/linear.py --quick --native build/benchmarks/native_bench --out "$RUNNER_TEMP/linear_quick.csv"
+          python benchmarks/transient.py --quick

@@ -114,3 +114,41 @@ Spec: [`docs/specs/2026-09-27-fd-jacobian-design.md`](docs/specs/2026-09-27-fd-j
   Next: F4.
 - **2026-09-27 — F4 (in progress).** PR #2 opened. Every check passed except the Windows wheel job. There, `test_backends_identical` demanded bit-for-bit equality between the C++ core (MSVC) and the Fortran core (ifx); the solutions differed by ≤ 4.4e-16 (1–2 ulp) in 21 of 60 values. This is a test flaw, not a solver defect. The test is now `test_backends_agree`, with tolerances of 1e-13 on solutions and 1e-6 on the FD blocks (forward differences amplify an ulp in F to ~1e-8). validation.md now scopes the bit-identical claim to the reference toolchain. Pushed for re-run.
 - **2026-09-27 — F4.** PR #2's re-run passed all 11 checks: CI on 5 platforms, wheels on 5 platforms, and the sdist. Merged into `main`. **Feature loop complete.**
+
+## Benchmark loop: solver comparison, layers 1–2 (branch `benchmarks`)
+Spec: [`docs/specs/2026-09-27-benchmarks-design.md`](docs/specs/2026-09-27-benchmarks-design.md). Work on the branch and merge via a PR. Benchmarks run locally; CI only smoke-tests the scripts.
+- [x] B1 Harness: `benchmarks/` layout, pinned `requirements.txt`, `env.py`, native C++ timing harness + CMake option; smoke test.
+- [x] B2 Layer 1: `linear.py` (BAND py/native, LAPACK band, SuperLU, dense), backward-error check, sweep → `results/linear.csv`, plots.
+- [x] B3 Layer 2 models: bandsolver BE/BDF2, IDA DAE (band), SciPy BDF reduced ODE; verify all agree on the same discrete solution.
+- [x] B4 Layer 2 sweeps: work-precision + mesh scaling → `results/transient*.csv`, plots.
+- [x] B5 `docs/benchmarks.md`, notebook 05 (reads the CSVs), README link, CI smoke test; PR, CI, merge.
+
+### Checkpoints
+- **2026-09-27 — B0.** Author approved layers 1–2 (PyBaMM deferred). scipy 1.18.1 and scikit-sundae 1.1.3 installed in `.venv`. The IDA API (band solver, algebraic_idx, calc_initcond, nfev/njev) was checked. Spec written. Next: B1.
+- **2026-09-27 — B1.** Added `benchmarks/`: `requirements.txt` (pins numpy 2.5.3, scipy 1.18.1, scikit-sundae 1.1.3, matplotlib 3.11.2), `env.py` (platform, CPU, compilers, versions, git commit to `results/env.json`), and `native_bench.cpp`. The native harness times the C++ and Fortran cores with no Python, taking the median of ≥5 repeats and ≥0.2 s per point; its CMake option `BANDSOLVER_BUILD_BENCHMARKS` is OFF by default, and a `--quick` smoke test is registered with CTest. Smoke run on an Apple M1 Pro: n=1, nj=25 takes 1.1 µs (C++) and 2.3 µs (Fortran); n=3, nj=50 takes 8.7 and 13.2 µs; backward error ≤ 1.5e-16. `benchmarks/results/` is excluded from the sdist. Next: B2.
+- **2026-09-27 — B2.** `benchmarks/linear.py` (+ `plot.py`) ran the full sweep: n ∈ {1,3,5,10,20,30} × nj ∈ {25…2000} on an M1 Pro, 322 measurements in 80 s, all with backward error ≤ 8.7e-16. Results: `results/linear.csv`, `linear_time.png`, `linear_speedup.png`.
+  - **BAND C++ (from Python) is fastest at every size.** It beats LAPACK banded (dgbsv, bandwidth widened to 3n−1 by X/Y) by 1.6–5.8× (median 2.4×) and SciPy SuperLU by 2.4–12.4× (median 4.8× natural ordering, 6.7× COLAMD). Dense only wins nowhere past about N = 50.
+  - Factor storage at n=30, nj=2000: BAND 14.9 MB, LAPACK band 128.6 MB, SuperLU 65.5 MB.
+  - Python-call overhead is about 5 µs fixed: 4.9× on n=1, nj=25, but ≤ 1.18× from nj ≈ 200.
+  - Scaling is linear in nj (×2.05 per doubling); n 10→30 costs ×13.8 (below n³ = 27, a small-block efficiency effect).
+  - **Finding:** the Fortran core is 1.5–2.2× slower than C++ *natively*, not just because of the C-ABI transposes. Its loops follow the legacy row-major order, which is cache-unfriendly in column-major Fortran. **Follow-up TODO:** optimise the partial-pivot path's loop order (legacy mode must keep its operation order).
+
+  Next: B3.
+- **2026-09-27 — B3.** Added `benchmarks/transient.py`. One `Model` class holds the notebook-2 finite-volume discretization (nj=81, t_end=5 s), and there are three stacks:
+  - `run_bandsolver`: BE or BDF2 with fixed Δt, analytic blocks;
+  - `run_ida`: IDA via scikit-sundae, band solver with lband=uband=3, `algebraic_idx`=φ, `calc_initcond='yp0'`;
+  - `run_scipy`: BDF on the reduced ODE, φ eliminated exactly per face, tridiagonal `jac_sparsity`.
+
+  **Consistency against an IDA rtol=1e-12 reference:** IDA at 1e-10 differs by 2.3e-8 mol/m³, SciPy at 1e-10 by 6.7e-8, bandsolver BDF2 at Δt=1e-4 by 1.3e-9, and BE at Δt=1e-4 by 1.3e-5 (its O(Δt) error). All stacks share one discrete solution. The DAE and the reduced ODE are equivalent, as designed.
+
+  Early signal: for tight accuracy, fixed-step BE/BDF2 needs 50k steps (7 s), where adaptive IDA/SciPy need 365–710 steps (0.05 s). Next: B4 (work-precision and mesh sweeps).
+- **2026-09-27 — B4.** `transient.py` now has the consistency check, work-precision (nj=81) and mesh sweeps (nj 41–1281); results are in `results/transient_wp.csv`, `transient_mesh.csv`, `transient_work_precision.png` and `transient_mesh.png`. The full run takes about 25 s.
+  - **Per-step cost:** bandsolver full Newton runs 2.6–2.8 iterations/step; each iteration spends 51 µs in the Python fill and 10 µs in BAND at nj=81 (94/113 µs at nj=1281). IDA averages 1.3 residual evaluations/step and reuses its Jacobian (22 Jacobians in 143 steps).
+  - **Added variant, BDF2 with 1 Newton iteration/step** (the archival linearized usage): same accuracy as full Newton on this mildly nonlinear problem, e.g. 7.37e-6 at Δt=0.01, 2.7× cheaper. Its per-step cost is 64–242 µs for nj 41–1281, below IDA and SciPy up to nj ≈ 1000 and tied with IDA at 1281 (242 vs 238 µs).
+  - **Work-precision crossover** near an error of 1e-4 mol/m³ (1e-6 relative). For looser targets, linearized BDF2 is fastest: 8.1e-4 in 3.4 ms, vs SciPy 5.9e-4 in 8.3 ms and IDA 3.0e-3 in 7.6 ms. For tighter targets, adaptive order-5 BDF wins: IDA reaches 2.3e-8 in 51 ms, where BDF2 needs 343 ms for 7.3e-8.
+  - Backward Euler is dominated everywhere (first order).
+  - Conclusion: BAND is the faster kernel per step, and the remaining gap is time-integration strategy (adaptive step/order, Jacobian reuse), not linear algebra. Follow-up idea: adaptive BDF stepping, or use BAND as IDA's linear solver.
+
+  Next: B5.
+- **2026-09-27 — B5 (in progress).** Wrote `docs/benchmarks.md` (summary, methods, results tables, where the time goes, conclusions, fairness and limitations, reproduction commands) and `notebooks/05_benchmarks.ipynb` (reads the saved CSVs). Added README "Performance" and tutorial links, a CHANGELOG entry, and a CI benchmark smoke test (native harness via CTest; `linear.py --quick` and `transient.py --quick` on Linux and macOS). Corrected an overstatement before publishing: linearized BDF2 has the cheapest step *up to about 1000 nodes* and ties with IDA at 1281. Local tests: notebooks 5/5 and the README test pass. PR next.
+- **2026-09-27 — B5 done.** On PR #7's first CI run, the Linux aarch64 benchmark smoke step failed: scikit-sundae 1.1.3 has no wheel there, and the source build needs SUNDIALS. Fixed so that CI installs scikit-sundae only as a binary; the `--quick` run skips the IDA cases without it, and the full run requires it and exits with a clear message. Both paths were tested locally in an environment without scikit-sundae. The rerun passed on all 5 platforms. Merged. **Benchmark loop complete.**

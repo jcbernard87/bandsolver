@@ -96,13 +96,21 @@ Worked, fully explained examples live in [`notebooks/`](notebooks). Each one set
 | [2 · Binary electrolyte](notebooks/02_binary_electrolyte.ipynb) | **Coupled transient PDEs**: Nernst–Planck transport of concentration and potential under constant current, implicit Euler, validated against the analytic series solution and steady-state relations |
 | [3 · Porous electrode](notebooks/03_porous_electrode.ipynb) | The Newman–Tobias current distribution: solid and electrolyte potentials coupled by Butler–Volmer kinetics, solved from the residual alone, validated against the linear-kinetics analytic solution |
 | [4 · Finite differences vs finite volumes](notebooks/04_fd_vs_fv.ipynb) | The same electrode/separator diffusion problem discretized both ways, with the same solver. Nodal FD converges to the wrong answer (+8 % salt); FD with interface matching is first order; FV is second order and conserves exactly. Also covers a graded mesh, when FD is fine, and a decision guide |
+| [5 · Benchmarks](notebooks/05_benchmarks.ipynb) | Summary of the solver comparison (reads the saved results): BAND vs LAPACK banded, SuperLU and dense solves; fixed-step BAND vs adaptive SUNDIALS IDA and SciPy BDF on a coupled DAE |
 
 To run them locally: `pip install bandsolver[notebooks]` (or `pip install jupyterlab matplotlib`), then `jupyter lab notebooks/`. CI re-executes every notebook.
+
+## Performance
+
+Solving a single linear block system, BAND is **1.6–5.8× faster than LAPACK's banded solver** (median 2.4×) and **2.4–12× faster than SciPy's SuperLU**, with up to 9× less memory. The sweep covered n = 1–30 unknowns per node and nj = 25–2000 nodes.
+
+For whole transient simulations, BAND with fixed-step BDF2 and one linearized Newton correction per step is the fastest option down to errors of about 1e-6 relative. Below that, adaptive high-order integrators (SUNDIALS IDA, SciPy BDF) win. The method, full results and caveats are in [docs/benchmarks.md](docs/benchmarks.md) (single machine: Apple M1 Pro).
 
 ## Documentation
 
 - [docs/math.md](docs/math.md): formulation, elimination algorithm, pivoting, and Newton convergence.
 - [docs/api.md](docs/api.md): Fortran, C, C++ and Python API reference, layouts, and error codes.
+- [docs/benchmarks.md](docs/benchmarks.md): solver comparison (layers 1–2), with reproducible scripts in `benchmarks/`.
 - [docs/validation.md](docs/validation.md): measured accuracy and convergence, cross-backend and legacy agreement.
 - [docs/provenance.md](docs/provenance.md): origin of the algorithm, the frozen legacy oracle, and the open licensing questions.
 
