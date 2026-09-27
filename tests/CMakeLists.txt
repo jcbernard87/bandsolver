@@ -22,8 +22,11 @@ endif()
 band_fortran_test(test_newton bandsolver_f)
 
 add_executable(test_capi c/test_capi.c)
-target_link_libraries(test_capi PRIVATE bandsolver_f m)
-set_target_properties(test_capi PROPERTIES LINKER_LANGUAGE Fortran)
+target_link_libraries(test_capi PRIVATE bandsolver_f)
+if(NOT WIN32)
+  target_link_libraries(test_capi PRIVATE m)
+endif()
+set_target_properties(test_capi PROPERTIES LINKER_LANGUAGE C)
 add_test(NAME test_capi COMMAND test_capi)
 
 add_executable(test_band_cpp cpp/test_band.cpp)

@@ -1,0 +1,10 @@
+{
+  "title": "bandsolver: Newman's BAND block-tridiagonal solver in Fortran and C++ with Python bindings",
+  "upload_type": "software",
+  "creators": [{ "name": "Bernard, John" }],
+  "license": "BSD-3-Clause",
+  "keywords": ["numerical methods", "block tridiagonal", "Newton method", "electrochemistry", "Fortran", "C++", "Python"],
+  "related_identifiers": [
+    { "identifier": "10.1021/i160027a025", "relation": "references", "scheme": "doi" }
+  ]
+}

@@ -19,13 +19,28 @@ test = ["pytest"]
 [tool.scikit-build]
 wheel.packages = ["python/bandsolver"]
 # Never ship the private archival oracle, even if a copy is placed inside the tree.
-sdist.exclude = ["legacy/", "bandsolver-legacy-oracle/", "build*/", ".venv/", "TRACK1_LOOP.md", "*.log", "dist/"]
+sdist.exclude = ["legacy/", "bandsolver-legacy-oracle/", "build*/", ".venv/", "TRACK1_LOOP.md", "*.log", "dist/", ".github/", "ci/"]
 cmake.build-type = "Release"
 
 [tool.scikit-build.cmake.define]
 BANDSOLVER_BUILD_TESTS = "OFF"
 BANDSOLVER_BUILD_PYTHON = "ON"
 BANDSOLVER_BUILD_EXAMPLES = "OFF"
+
+[tool.cibuildwheel]
+skip = ["*-musllinux_*"]
+archs = ["native"]
+build-verbosity = 1
+test-requires = ["pytest"]
+test-sources = ["tests", "examples", "README.md"]
+test-command = "python -m pytest -q tests/python"
+
+[tool.cibuildwheel.linux]
+before-all = "sh ci/install_gfortran_manylinux.sh"
+
+[tool.cibuildwheel.windows]
+environment = { CMAKE_GENERATOR = "Ninja", CC = "cl", CXX = "cl", FC = "ifx" }
+repair-wheel-command = "python ci/repair_windows.py {dest_dir} {wheel}"
 
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]
