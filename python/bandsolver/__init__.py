@@ -42,6 +42,7 @@ __all__ = [
 
 BACKENDS = ("cpp", "fortran")
 _PIVOTS = {"partial": 0, "legacy": 1}
+_KERNELS = {"fast": 0, "reference": 1}
 
 _OK, _SINGULAR, _INVALID, _NOT_CONVERGED, _NON_FINITE, _CALLBACK = range(6)
 
@@ -145,6 +146,13 @@ def _pivot_code(pivot: str) -> int:
         raise ValueError(f"pivot must be one of {tuple(_PIVOTS)}, got {pivot!r}") from None
 
 
+def _kernel_code(kernel: str) -> int:
+    try:
+        return _KERNELS[kernel]
+    except KeyError:
+        raise ValueError(f"kernel must be one of {tuple(_KERNELS)}, got {kernel!r}") from None
+
+
 def _as_blocks(a, name: str, shape=None) -> np.ndarray:
     arr = np.ascontiguousarray(a, dtype=np.float64)
     if shape is not None and arr.shape != shape:
@@ -152,8 +160,13 @@ def _as_blocks(a, name: str, shape=None) -> np.ndarray:
     return arr
 
 
-def solve(A, B, D, G, X=None, Y=None, *, pivot: str = "partial", backend: str = "cpp") -> np.ndarray:
+def solve(A, B, D, G, X=None, Y=None, *, pivot: str = "partial", backend: str = "cpp",
+          kernel: str = "fast") -> np.ndarray:
     """Solve the block system and return ``dc`` with shape ``(nj, n)``.
+
+    ``kernel`` selects the Fortran loop organisation (``"fast"`` column-major, default, or
+    ``"reference"`` archival loops); both give bit-identical results. It only affects the
+    ``"fortran"`` backend.
 
     Raises :class:`SingularBlockError`, :class:`NonFiniteError` or ``ValueError``.
     """
@@ -169,7 +182,7 @@ def solve(A, B, D, G, X=None, Y=None, *, pivot: str = "partial", backend: str = 
     G = _as_blocks(G, "G", (nj, n))
     X = None if X is None else _as_blocks(X, "X", (n, n))
     Y = None if Y is None else _as_blocks(Y, "Y", (n, n))
-    dc, status, node, _ = _core.solve(n, nj, A, B, D, G, X, Y, _pivot_code(pivot), backend)
+    dc, status, node, _ = _core.solve(n, nj, A, B, D, G, X, Y, _pivot_code(pivot), backend, _kernel_code(kernel))
     _raise_for(status, node, "solve")
     return dc
 
@@ -188,6 +201,7 @@ def newton(
     pivot: str = "partial",
     require_convergence: bool = True,
     backend: str = "cpp",
+    kernel: str = "fast",
 ) -> NewtonResult:
     """Newton iteration ``c <- c + damping * dc`` with ``K(c) dc = G(c)``.
 
@@ -213,7 +227,7 @@ def newton(
     if rtol < 0 or atol < 0 or (rtol == 0 and atol == 0):
         raise ValueError("rtol and atol must be >= 0 and not both zero")
     r = _core.newton(n, nj, fill, c0, rtol, atol, damping, int(max_iter), _pivot_code(pivot),
-                     bool(require_convergence), backend)
+                     bool(require_convergence), backend, _kernel_code(kernel))
     return _newton_result(r, "newton")
 
 
@@ -282,6 +296,7 @@ def newton_fd(
     rel_step: float = _SQRT_EPS,
     typical: float = 1.0,
     backend: str = "cpp",
+    kernel: str = "fast",
 ) -> NewtonResult:
     """Newton iteration where the Jacobian comes from :func:`fd_jacobian`.
 
@@ -298,7 +313,7 @@ def newton_fd(
     if rtol < 0 or atol < 0 or (rtol == 0 and atol == 0):
         raise ValueError("rtol and atol must be >= 0 and not both zero")
     r = _core.newton_fd(n, nj, residual, c0, rtol, atol, damping, int(max_iter), _pivot_code(pivot),
-                        bool(require_convergence), rel_step, typical, backend)
+                        bool(require_convergence), rel_step, typical, backend, _kernel_code(kernel))
     return _newton_result(r, "newton_fd")
 
 

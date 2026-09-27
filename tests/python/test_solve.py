@@ -71,3 +71,14 @@ def test_argument_validation(rng):
         bs.solve(A, B, D, G, backend="julia")
     with pytest.raises(ValueError, match="pivot"):
         bs.solve(A, B, D, G, pivot="full")
+
+
+@pytest.mark.parametrize("xy", [False, True])
+@pytest.mark.parametrize("n,nj", [(1, 3), (3, 4), (7, 60)])
+def test_fortran_kernels_bit_identical(rng, xy, n, nj):
+    A, B, D, G, X, Y = random_system(rng, n, nj, xy)
+    fast = bs.solve(A, B, D, G, X, Y, backend="fortran", kernel="fast")
+    ref = bs.solve(A, B, D, G, X, Y, backend="fortran", kernel="reference")
+    np.testing.assert_array_equal(fast, ref)
+    with pytest.raises(ValueError, match="kernel"):
+        bs.solve(A, B, D, G, backend="fortran", kernel="turbo")

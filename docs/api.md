@@ -15,6 +15,8 @@
 
 **Pivot modes:** `0 partial` (default), `1 legacy`. See [math.md](math.md).
 
+**Fortran kernel** (Fortran backend only): `0 fast` (default; column-major loops) or `1 reference` (archival loop order). With gfortran the two give bit-identical results; other compilers agree to rounding. `reference` exists for comparison and benchmarking. The option is available in Fortran as `band_solve(..., kernel=)` and `newton_options%kernel`, in C as `bandsolver_f_solve_kernel` and `bandsolver_newton_options.kernel`, and in Python as `kernel="fast"|"reference"`.
+
 **Fill contract (Newton):** at state `c`, set `G = −F(c)` and the Jacobian blocks. Output arrays arrive zeroed, so only nonzero entries need to be written.
 
 ## Fortran (`fortran/src`)

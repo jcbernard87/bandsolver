@@ -106,6 +106,8 @@ def run_python(ns, njs, min_total, dense_limit=3000):
                                 nj * n * (n + 1) * 8),
                 "band_fortran_py": (lambda: bs.solve(A, B, D, G, X, Y, backend="fortran"), 0.0,
                                     nj * n * (n + 1) * 8),
+                "band_fortran_reference_py": (lambda: bs.solve(A, B, D, G, X, Y, backend="fortran",
+                                                               kernel="reference"), 0.0, nj * n * (n + 1) * 8),
                 "lapack_band": (lambda: scipy.linalg.solve_banded((lu, lu), ab, g, check_finite=False).reshape(nj, n),
                                 t_band, (3 * lu + 1) * N * 8),
             }

@@ -64,7 +64,28 @@ Converting the blocks into each library's input format is **excluded** from the 
 - **Memory.** Factor storage at n = 30, nj = 2000 is 14.9 MB for BAND, 128.6 MB for LAPACK banded, and 65.5 MB for SuperLU.
 - **Scaling.** Cost is linear in nj (×2.05 per doubling). It grows more slowly than n³ with the block size, ×13.8 from n = 10 to 30, because small blocks are less efficient per flop.
 - **Python overhead.** About 5 µs per call, i.e. ×4.9 on the smallest system (n = 1, nj = 25) but ≤ ×1.2 from nj ≈ 200. The native and Python timings of large systems are within run-to-run noise.
-- **Fortran vs C++.** The Fortran core is 1.5–2.2× slower than the C++ core **even natively**. Its loops keep the archival row-major operation order, which runs against Fortran's column-major memory layout. Optimizing the partial-pivot path is a recorded follow-up; the legacy mode must keep its operation order.
+- **Fortran vs C++.** The Fortran core was originally 1.5–2.2× slower than the C++ core even natively. Its loops kept the archival row-wise order, which runs against Fortran's column-major memory layout. Since 0.1.2 the default **fast kernel** is used; see the next section.
+
+### Fortran kernel option: fast vs reference loops
+
+The option is `kernel="fast"` (default) or `kernel="reference"` (Fortran backend; `KERNEL_FAST` / `KERNEL_REFERENCE` in Fortran and C).
+- **What the fast kernel changes:** it runs the partial-pivot block updates, the Gauss–Jordan elimination and the back substitution column by column, which is contiguous in Fortran.
+- **Accuracy:** each matrix entry still accumulates in the same order, so with gfortran the two kernels give **bit-identical results**, checked by tests. Other compilers may vectorise or fuse the two loop forms differently; with Intel ifx the tests require agreement to rounding (≤ 16 ε relative) instead, and the library is compiled with Intel's precise FP model.
+- **Small blocks:** for blocks smaller than 4×4, the column loops are too short to pay off, so the fast kernel uses the reference loop order there.
+- **Legacy mode:** the legacy pivot mode always uses the reference loops.
+
+| n | reference / fast (Fortran core, native) | Fortran fast / C++, via C ABI | Fortran fast / C++, core called from Fortran |
+|---|---|---|---|
+| 1 | 1.00 | 2.2 | 2.2 |
+| 3 | 1.00 | 1.5 | 1.3 |
+| 5 | 1.10 | 1.06 | 0.96 |
+| 10 | 1.17–1.22 | 1.34 | 1.14 |
+| 20 | 0.99–1.02 | 1.26–1.34 | 1.08 |
+| 30 | 1.36–1.38 | 1.12–1.22 | 0.98 |
+
+The first two columns come from `results/linear.csv` (nj = 100 and 2000); the last is a direct Fortran timing at nj = 2000.
+- **Where Fortran now stands:** for n ≥ 5, the Fortran core is at parity with C++ when called from Fortran. Through the C ABI it's within 1.06–1.34×; the extra cost comes from the ABI's block transposes.
+- **Remaining gap:** for n ≤ 3, a fixed per-node overhead keeps Fortran 1.3–2.2× slower than C++. This is recorded as a follow-up; a specialised scalar/2×2 path is the likely fix.
 
 ## Layer 2: a nonlinear transient simulation
 
