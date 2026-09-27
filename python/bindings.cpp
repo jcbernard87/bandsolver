@@ -14,6 +14,7 @@
 
 #include <bandsolver/band.hpp>
 #include <bandsolver/newton.hpp>
+#include <bandsolver/fd.hpp>
 
 #include "bandsolver_f.h"
 
@@ -160,6 +161,170 @@ py::dict newton(int n, int nj, const py::function& fill, const Arr& c0, double r
     return r;
 }
 
+// Calls the Python residual(c) and copies F into the output buffer.
+void call_residual(const py::function& residual, int n, int nj, const double* c, double* F) {
+    Arr cv({static_cast<py::ssize_t>(nj), static_cast<py::ssize_t>(n)});
+    std::copy(c, c + static_cast<std::size_t>(n) * nj, cv.mutable_data());
+    Arr f = Arr::ensure(residual(cv));
+    if (!f) throw std::invalid_argument("residual(c) must return a numeric array");
+    require_size(f, static_cast<py::ssize_t>(n) * nj, "F");
+    std::copy(f.data(), f.data() + f.size(), F);
+}
+
+struct FortranResidualCtx {
+    const py::function* residual;
+    std::exception_ptr error;
+};
+
+extern "C" int fortran_residual_trampoline(int n, int nj, const double* c, double* F, void* ctx) {
+    auto* f = static_cast<FortranResidualCtx*>(ctx);
+    try {  // exceptions must not unwind through Fortran frames
+        call_residual(*f->residual, n, nj, c, F);
+        return 0;
+    } catch (...) {
+        f->error = std::current_exception();
+        return 1;
+    }
+}
+
+bandsolver::FdOptions fd_opts(double rel_step, double typical) {
+    if (!(rel_step > 0) || !(typical > 0)) throw std::invalid_argument("rel_step and typical must be > 0");
+    bandsolver::FdOptions o;
+    o.rel_step = rel_step;
+    o.typical = typical;
+    return o;
+}
+
+Arr blocks(int n, int nj) {
+    return Arr({static_cast<py::ssize_t>(nj), static_cast<py::ssize_t>(n), static_cast<py::ssize_t>(n)});
+}
+
+py::tuple fd_jacobian(int n, int nj, const py::function& residual, const Arr& c, double rel_step, double typical,
+                      const std::string& backend) {
+    if (n < 1 || nj < 3) throw std::invalid_argument("require n >= 1 and nj >= 3");
+    require_size(c, static_cast<py::ssize_t>(n) * nj, "c");
+    const bandsolver::FdOptions o = fd_opts(rel_step, typical);
+    Arr A = blocks(n, nj), B = blocks(n, nj), D = blocks(n, nj);
+    Arr G({static_cast<py::ssize_t>(nj), static_cast<py::ssize_t>(n)});
+    Arr X({static_cast<py::ssize_t>(n), static_cast<py::ssize_t>(n)}), Y({static_cast<py::ssize_t>(n), static_cast<py::ssize_t>(n)});
+    long evals = 0;
+    if (backend == "cpp") {
+        bandsolver::BlockSystem s(n, nj);
+        evals = bandsolver::fd_jacobian(n, nj, [&](const double* x, double* F) { call_residual(residual, n, nj, x, F); },
+                                        c.data(), s, o);
+        std::copy(s.A().begin(), s.A().end(), A.mutable_data());
+        std::copy(s.B().begin(), s.B().end(), B.mutable_data());
+        std::copy(s.D().begin(), s.D().end(), D.mutable_data());
+        std::copy(s.G().begin(), s.G().end(), G.mutable_data());
+        std::copy(s.X().begin(), s.X().end(), X.mutable_data());
+        std::copy(s.Y().begin(), s.Y().end(), Y.mutable_data());
+    } else if (backend == "fortran") {
+        FortranResidualCtx ctx{&residual, nullptr};
+        bandsolver_fd_options fo{o.rel_step, o.typical};
+        int st = bandsolver_f_fd_jacobian(n, nj, fortran_residual_trampoline, &ctx, c.data(), &fo, A.mutable_data(),
+                                          B.mutable_data(), D.mutable_data(), G.mutable_data(), X.mutable_data(),
+                                          Y.mutable_data(), &evals);
+        if (ctx.error) std::rethrow_exception(ctx.error);
+        if (st != 0) throw std::runtime_error("bandsolver_f_fd_jacobian failed with status " + std::to_string(st));
+    } else {
+        throw std::invalid_argument("backend must be 'cpp' or 'fortran'");
+    }
+    return py::make_tuple(A, B, D, G, X, Y, evals);
+}
+
+py::dict newton_fd(int n, int nj, const py::function& residual, const Arr& c0, double rtol, double atol,
+                   double damping, int max_iter, int pivot, bool require_convergence, double rel_step, double typical,
+                   const std::string& backend) {
+    if (n < 1 || nj < 3) throw std::invalid_argument("require n >= 1 and nj >= 3");
+    if (max_iter < 1) throw std::invalid_argument("max_iter must be >= 1");
+    require_size(c0, static_cast<py::ssize_t>(n) * nj, "c0");
+    const bandsolver::FdOptions o = fd_opts(rel_step, typical);
+    Arr c({static_cast<py::ssize_t>(nj), static_cast<py::ssize_t>(n)});
+    std::copy(c0.data(), c0.data() + c0.size(), c.mutable_data());
+    py::dict r;
+    if (backend == "cpp") {
+        bandsolver::NewtonOptions no;
+        no.rtol = rtol; no.atol = atol; no.damping = damping; no.max_iter = max_iter;
+        no.pivot = static_cast<bandsolver::Pivot>(pivot); no.require_convergence = require_convergence;
+        auto res = bandsolver::newton_fd(
+            n, nj, [&](const double* x, double* F) { call_residual(residual, n, nj, x, F); }, c.mutable_data(), no, o);
+        if (res.callback_exception) std::rethrow_exception(res.callback_exception);
+        r["status"] = static_cast<int>(res.status);
+        r["iterations"] = res.iterations;
+        r["converged"] = res.converged;
+        r["fail_node"] = res.fail_node;
+        r["update_norm"] = res.update_norm;
+        r["step_norm"] = res.step_norm;
+        r["residual_norm"] = res.residual_norm;
+        r["residual_evaluations"] = res.residual_evaluations;
+    } else if (backend == "fortran") {
+        bandsolver_newton_options no{rtol, atol, damping, max_iter, pivot, require_convergence ? 1 : 0};
+        bandsolver_fd_options fo{o.rel_step, o.typical};
+        bandsolver_newton_result res;
+        std::vector<double> hu(max_iter), hs(max_iter), hr(max_iter);
+        long evals = 0;
+        FortranResidualCtx ctx{&residual, nullptr};
+        bandsolver_f_newton_fd(n, nj, fortran_residual_trampoline, &ctx, c.mutable_data(), &no, &fo, &res, hu.data(),
+                               hs.data(), hr.data(), &evals);
+        if (ctx.error) std::rethrow_exception(ctx.error);
+        const int nres = std::min(res.iterations, max_iter);
+        const int nstep = (res.status == BANDSOLVER_OK || res.status == BANDSOLVER_NOT_CONVERGED) ? nres
+                                                                                                    : std::max(nres - 1, 0);
+        r["status"] = res.status;
+        r["iterations"] = res.iterations;
+        r["converged"] = res.converged != 0;
+        r["fail_node"] = res.fail_node > 0 ? res.fail_node - 1 : -1;
+        r["update_norm"] = std::vector<double>(hu.begin(), hu.begin() + nstep);
+        r["step_norm"] = std::vector<double>(hs.begin(), hs.begin() + nstep);
+        r["residual_norm"] = std::vector<double>(hr.begin(), hr.begin() + nres);
+        r["residual_evaluations"] = evals;
+    } else {
+        throw std::invalid_argument("backend must be 'cpp' or 'fortran'");
+    }
+    r["c"] = c;
+    return r;
+}
+
+py::tuple mismatch(double error, int node, int row, int col, double user, double fd) {
+    return py::make_tuple(error, node, row, col, user, fd);
+}
+
+// Returns {block: (error, node, row, col, user, fd)} with 0-based indices (-1 if empty).
+py::dict check_jacobian(int n, int nj, const py::function& fill, const Arr& c, double rel_step, double typical,
+                        const std::string& backend) {
+    if (n < 1 || nj < 3) throw std::invalid_argument("require n >= 1 and nj >= 3");
+    require_size(c, static_cast<py::ssize_t>(n) * nj, "c");
+    const bandsolver::FdOptions o = fd_opts(rel_step, typical);
+    py::dict r;
+    if (backend == "cpp") {
+        auto chk = bandsolver::check_jacobian(
+            n, nj,
+            [&](const double* x, bandsolver::BlockSystem& s) {
+                call_fill(fill, n, nj, x, s.A().data(), s.B().data(), s.D().data(), s.G().data(), s.X().data(),
+                          s.Y().data());
+            },
+            c.data(), o);
+        const char* names[5] = {"A", "B", "D", "X", "Y"};
+        const bandsolver::JacobianMismatch* ms[5] = {&chk.A, &chk.B, &chk.D, &chk.X, &chk.Y};
+        for (int b = 0; b < 5; ++b)
+            r[names[b]] = mismatch(ms[b]->error, ms[b]->node, ms[b]->row, ms[b]->col, ms[b]->user, ms[b]->fd);
+    } else if (backend == "fortran") {
+        FortranCtx ctx{&fill, nullptr};
+        bandsolver_fd_options fo{o.rel_step, o.typical};
+        bandsolver_jacobian_check chk;
+        int st = bandsolver_f_check_jacobian(n, nj, fortran_trampoline, &ctx, c.data(), &fo, &chk);
+        if (ctx.error) std::rethrow_exception(ctx.error);
+        if (st != 0) throw std::runtime_error("bandsolver_f_check_jacobian failed with status " + std::to_string(st));
+        const char* names[5] = {"A", "B", "D", "X", "Y"};
+        const bandsolver_jacobian_mismatch* ms[5] = {&chk.A, &chk.B, &chk.D, &chk.X, &chk.Y};
+        for (int b = 0; b < 5; ++b)  // 1-based -> 0-based (0 = no entries -> -1)
+            r[names[b]] = mismatch(ms[b]->error, ms[b]->node - 1, ms[b]->row - 1, ms[b]->col - 1, ms[b]->user, ms[b]->fd);
+    } else {
+        throw std::invalid_argument("backend must be 'cpp' or 'fortran'");
+    }
+    return r;
+}
+
 }  // namespace
 
 PYBIND11_MODULE(_core, m) {
@@ -169,4 +334,11 @@ PYBIND11_MODULE(_core, m) {
     m.def("newton", &newton, py::arg("n"), py::arg("nj"), py::arg("fill"), py::arg("c0"), py::arg("rtol"),
           py::arg("atol"), py::arg("damping"), py::arg("max_iter"), py::arg("pivot"), py::arg("require_convergence"),
           py::arg("backend"));
+    m.def("fd_jacobian", &fd_jacobian, py::arg("n"), py::arg("nj"), py::arg("residual"), py::arg("c"),
+          py::arg("rel_step"), py::arg("typical"), py::arg("backend"));
+    m.def("newton_fd", &newton_fd, py::arg("n"), py::arg("nj"), py::arg("residual"), py::arg("c0"), py::arg("rtol"),
+          py::arg("atol"), py::arg("damping"), py::arg("max_iter"), py::arg("pivot"), py::arg("require_convergence"),
+          py::arg("rel_step"), py::arg("typical"), py::arg("backend"));
+    m.def("check_jacobian", &check_jacobian, py::arg("n"), py::arg("nj"), py::arg("fill"), py::arg("c"),
+          py::arg("rel_step"), py::arg("typical"), py::arg("backend"));
 }

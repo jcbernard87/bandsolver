@@ -7,6 +7,7 @@ import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "examples"))
 
+import fd_jacobian  # noqa: E402
 import nonlinear_bvp  # noqa: E402
 import reaction_diffusion  # noqa: E402
 import transient_diffusion  # noqa: E402
@@ -47,3 +48,13 @@ def test_backends_give_identical_errors(module):
     b = module.run("fortran", grids=(41,))
     assert a[0]["iterations"] == b[0]["iterations"]
     assert abs(a[0]["error"] - b[0]["error"]) <= 1e-14
+
+
+def test_fd_example_matches_analytic_and_flags_bug(backend):
+    rows, good, bad = fd_jacobian.run(backend, grids=(41, 81, 161))
+    for r in rows:
+        assert r["it_fd"] == r["it_analytic"] and r["diff"] < 1e-12 and r["evals"] == 10 * r["it_fd"]
+    assert np.all(np.abs(orders(rows) - 2) < 0.05)
+    assert good.max_error < 1e-5
+    name, m = bad.worst()
+    assert (name, m.row, m.col) == ("B", 1, 0) and m.error > 1e-2 and np.sign(m.user) != np.sign(m.fd)

@@ -29,8 +29,13 @@ __all__ = [
     "NonFiniteError",
     "NotConvergedError",
     "NewtonResult",
+    "JacobianMismatch",
+    "JacobianCheck",
     "solve",
     "newton",
+    "fd_jacobian",
+    "newton_fd",
+    "check_jacobian",
 ]
 
 BACKENDS = ("cpp", "fortran")
@@ -73,6 +78,45 @@ class NewtonResult:
     update_norm: np.ndarray = field(repr=False)
     step_norm: np.ndarray = field(repr=False)
     residual_norm: np.ndarray = field(repr=False)
+    residual_evaluations: int = 0  #: set by newton_fd only
+
+
+@dataclass
+class JacobianMismatch:
+    """Largest discrepancy in one block type (0-based node/row/col; -1 if empty).
+
+    ``error = |user - fd| / max(|user|, |fd|, 1e-3 * rowscale)``, where rowscale is the
+    largest Jacobian entry of the same equation row. X is reported at node 0, Y at nj-1.
+    """
+
+    error: float
+    node: int
+    row: int
+    col: int
+    user: float
+    fd: float
+
+
+@dataclass
+class JacobianCheck:
+    """Result of :func:`check_jacobian`: one :class:`JacobianMismatch` per block type.
+
+    A correct Jacobian typically scores 1e-8 to 1e-5; above ~1e-3 indicates a bug.
+    """
+
+    A: JacobianMismatch
+    B: JacobianMismatch
+    D: JacobianMismatch
+    X: JacobianMismatch
+    Y: JacobianMismatch
+
+    @property
+    def max_error(self) -> float:
+        return max(m.error for m in (self.A, self.B, self.D, self.X, self.Y))
+
+    def worst(self):
+        """``(block_name, JacobianMismatch)`` with the largest error."""
+        return max(((k, getattr(self, k)) for k in "ABDXY"), key=lambda kv: kv[1].error)
 
 
 def _raise_for(status: int, node: int, what: str) -> None:
@@ -168,6 +212,10 @@ def newton(
         raise ValueError("rtol and atol must be >= 0 and not both zero")
     r = _core.newton(n, nj, fill, c0, rtol, atol, damping, int(max_iter), _pivot_code(pivot),
                      bool(require_convergence), backend)
+    return _newton_result(r, "newton")
+
+
+def _newton_result(r, what: str) -> NewtonResult:
     result = NewtonResult(
         c=r["c"],
         converged=bool(r["converged"]),
@@ -176,10 +224,92 @@ def newton(
         update_norm=np.asarray(r["update_norm"]),
         step_norm=np.asarray(r["step_norm"]),
         residual_norm=np.asarray(r["residual_norm"]),
+        residual_evaluations=int(r.get("residual_evaluations", 0)),
     )
     if result.status == _NOT_CONVERGED:
         raise NotConvergedError(
-            f"newton: not converged after {result.iterations} iterations "
+            f"{what}: not converged after {result.iterations} iterations "
             f"(last scaled update {result.update_norm[-1]:.3e})", result)
-    _raise_for(result.status, int(r["fail_node"]), "newton")
+    _raise_for(result.status, int(r["fail_node"]), what)
     return result
+
+
+def _state(c, name: str) -> np.ndarray:
+    c = np.ascontiguousarray(c, dtype=np.float64)
+    if c.ndim != 2 or c.shape[0] < 3 or c.shape[1] < 1:
+        raise ValueError(f"{name} must have shape (nj, n) with nj >= 3, got {c.shape}")
+    return c
+
+
+def _check_fd(rel_step: float, typical: float) -> None:
+    if not (rel_step > 0 and typical > 0):
+        raise ValueError("rel_step and typical must be > 0")
+
+
+_SQRT_EPS = float(np.sqrt(np.finfo(float).eps))
+
+
+def fd_jacobian(residual: Callable[[np.ndarray], np.ndarray], c, *, rel_step: float = _SQRT_EPS,
+                typical: float = 1.0, backend: str = "cpp"):
+    """Jacobian blocks of ``residual`` at ``c`` by finite differences.
+
+    Returns ``(A, B, D, G, X, Y)`` in the layout used by :func:`solve`, with ``G = -F(c)``.
+    ``residual(c)`` takes the state (shape ``(nj, n)``, a copy) and returns ``F`` (same
+    shape). ``F_j`` must depend only on ``c_{j-1}, c_j, c_{j+1}`` (plus ``c_2`` for ``F_0``
+    and ``c_{nj-3}`` for ``F_{nj-1}``); then one Jacobian costs ``3n + 1`` residual calls,
+    independent of ``nj``. Forward differences with step ``rel_step * max(|c|, typical)``.
+    """
+    _check_backend(backend)
+    _check_fd(rel_step, typical)
+    c = _state(c, "c")
+    nj, n = c.shape
+    A, B, D, G, X, Y, _ = _core.fd_jacobian(n, nj, residual, c, rel_step, typical, backend)
+    return A, B, D, G, X, Y
+
+
+def newton_fd(
+    residual: Callable[[np.ndarray], np.ndarray],
+    c0,
+    *,
+    rtol: float = 1e-10,
+    atol: float = 1e-12,
+    damping: float = 1.0,
+    max_iter: int = 50,
+    pivot: str = "partial",
+    require_convergence: bool = True,
+    rel_step: float = _SQRT_EPS,
+    typical: float = 1.0,
+    backend: str = "cpp",
+) -> NewtonResult:
+    """Newton iteration where the Jacobian comes from :func:`fd_jacobian`.
+
+    Only the residual is required. Options and errors are as for :func:`newton`;
+    ``NewtonResult.residual_evaluations`` reports the total residual calls
+    (``(3n + 1)`` per iteration).
+    """
+    _check_backend(backend)
+    _check_fd(rel_step, typical)
+    c0 = _state(c0, "c0")
+    nj, n = c0.shape
+    if not (0 < damping <= 1):
+        raise ValueError("damping must be in (0, 1]")
+    if rtol < 0 or atol < 0 or (rtol == 0 and atol == 0):
+        raise ValueError("rtol and atol must be >= 0 and not both zero")
+    r = _core.newton_fd(n, nj, residual, c0, rtol, atol, damping, int(max_iter), _pivot_code(pivot),
+                        bool(require_convergence), rel_step, typical, backend)
+    return _newton_result(r, "newton_fd")
+
+
+def check_jacobian(fill: Callable[[np.ndarray], FillResult], c, *, rel_step: float = _SQRT_EPS,
+                   typical: float = 1.0, backend: str = "cpp") -> JacobianCheck:
+    """Compare a hand-written ``fill`` (as passed to :func:`newton`) with finite differences.
+
+    The residual is taken from the fill itself (``F = -G``), so no separate residual is
+    needed. Returns the largest mismatch per block type; see :class:`JacobianCheck`.
+    """
+    _check_backend(backend)
+    _check_fd(rel_step, typical)
+    c = _state(c, "c")
+    nj, n = c.shape
+    r = _core.check_jacobian(n, nj, fill, c, rel_step, typical, backend)
+    return JacobianCheck(**{k: JacobianMismatch(*r[k]) for k in "ABDXY"})

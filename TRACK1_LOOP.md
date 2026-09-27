@@ -81,3 +81,36 @@ Spec: [`docs/specs/2026-09-26-band-library-design.md`](docs/specs/2026-09-26-ban
   - The stray tracked `build.log` was removed.
   - **Git history still contains `legacy/`** in earlier commits, so history must be rewritten or squashed before any push.
 - **2026-09-26 — Fresh repository (user chose option 2).** The development history (12 commits, including `legacy/`) was moved to a private backup at `../bandsolver-dev-history.git`, which can be inspected with `git --git-dir=../bandsolver-dev-history.git log`. `bandsolver/` was re-initialized on branch `main` with one commit of the current tree: 45 files, and no `legacy/` anywhere in its history. A clean clone configures without the oracle (legacy tests skipped), passes ctest 7/7, installs with isolated `pip install .`, and passes pytest 83/83. Still not pushed or published.
+
+## Feature loop: finite-difference Jacobians (branch `fd-jacobian`)
+Spec: [`docs/specs/2026-09-27-fd-jacobian-design.md`](docs/specs/2026-09-27-fd-jacobian-design.md). Same rules as above. Work on the branch and merge via a PR once CI is green.
+- [x] F1 C++ core: `fd_jacobian`, `fd_fill`, `newton_fd`, `check_jacobian` + tests (analytic match incl. nj=3 X/Y, eval counts, planted-error detection, convergence).
+- [x] F2 Fortran core + C ABI: `band_residual_problem`, `band_fd_jacobian`, `band_newton_fd`, `band_check_jacobian`, `bandsolver_f_fd_jacobian`, `bandsolver_f_newton_fd` + tests; cross-check against C++.
+- [x] F3 Python: `fd_jacobian`, `newton_fd`, `check_jacobian` on both backends + pytest; FD example; docs (api, math, README, validation).
+- [x] F4 Open a PR, wait for green CI and wheels on all platforms, merge; update the handoff.
+
+### Checkpoints
+- **2026-09-27 — F0.** The author approved the design; spec written; branch `fd-jacobian` created. Next: F1.
+- **2026-09-27 — F1.** Added `cpp/include/bandsolver/fd.hpp` and `cpp/src/fd.cpp`, containing `fd_jacobian` (period-3 colouring, 3n+1 evaluations), `fd_fill`, `newton_fd` and `check_jacobian`. `NewtonResult` gains `residual_evaluations`. Test results:
+  - On a nonlinear n ∈ {1,3} problem with nonlinear X/Y terms, the finite-difference blocks match the analytic ones to ≤ 1.6e-8 relative for nj ∈ {3,4,5,10}, always with exactly 3n+1 evaluations.
+  - `newton_fd` takes the same 9 iterations as analytic Newton and reaches the same solution within 3e-15. Its evaluation count is exactly (3n+1)·iterations.
+  - **Design adjustment:** `check_jacobian` now measures each entry against its equation row's scale, so the floor is 1e-3·rowscale. The first test run showed that per-entry relative error flags ordinary finite-difference noise on tiny entries (3.6e-4 on a correct Jacobian). After the change, a correct fill scores 1.4e-5, a planted D error 1.6 (located at the right node, row and column), and a missing X entry about 1.
+  - Exceptions propagate, and invalid options are rejected.
+  - ctest passes 10/10, and the new tests are clean under ASan/UBSan.
+
+  Next: F2.
+- **2026-09-27 — F2.** Added the Fortran module `bandsolver_fd` (`fortran/src/band_fd.f90`): the abstract `band_residual_problem` type, `fd_options`, `band_fd_jacobian`, `band_newton_fd` (through an internal fill adapter) and `band_check_jacobian` (1-based locations, row-scaled metric). `newton_result` gains `residual_evaluations`. The C ABI gains `bandsolver_f_default_fd_options`, `bandsolver_f_fd_jacobian`, `bandsolver_f_newton_fd` and `bandsolver_f_check_jacobian`, with the new structs in `bandsolver_f.h`. Test results:
+  - `test_fd` (Fortran): the finite-difference blocks match analytic for n ∈ {1,3}, nj ∈ {3,4,5,10} with 3n+1 evaluations; `band_newton_fd` matches analytic Newton to 4e-16 with (3n+1) evaluations per iteration; a correct fill scores 1.3e-6; the planted error is located at node 5, row 2, column 3 (1-based); the missing X entry is detected; errors and invalid options are handled.
+  - `test_fd_cross`: **the C++ and Fortran results are bit-identical**, covering the Jacobian blocks, the Newton iterates and evaluation counts (9 iterations, 90 evaluations each), and the check report (same location after the 1-based offset, same score).
+  - Shared test problem moved to `tests/cpp/fd_problem.hpp`.
+  - ctest passes 12/12 in both Release and the Fortran `-fcheck=all` + FPE-trap build.
+
+  Next: F3.
+- **2026-09-27 — F3.** Python gains `fd_jacobian`, `newton_fd` (whose `NewtonResult.residual_evaluations` counts residual calls) and `check_jacobian`, which returns a `JacobianCheck` of `JacobianMismatch` values with `.max_error` and `.worst()`. All work on both backends, and residual and fill exceptions propagate unchanged, including through the Fortran path via a new trampoline.
+  - Added `examples/fd_jacobian.py`: on the coupled n=3 DAE, `newton_fd` takes the same 5 iterations as analytic Newton, uses 50 residual calls independent of nj, matches within 3e-14, and has order 2.000. `check_jacobian` scores the correct fill 3.6e-9 and locates a planted sign bug at block B, row 1, column 0 with score 0.16. The score is modest because the entry is tiny next to the row's 2/h² scale, but it is well above the 1e-3 bug line.
+  - Docs updated: math.md (new finite-difference section), api.md (all four interfaces), README (residual-only snippet), validation.md §5. `test_readme` now runs every README Python block.
+  - Tests: pytest 103 passed; ctest 12/12.
+
+  Next: F4.
+- **2026-09-27 — F4 (in progress).** PR #2 opened. Every check passed except the Windows wheel job. There, `test_backends_identical` demanded bit-for-bit equality between the C++ core (MSVC) and the Fortran core (ifx); the solutions differed by ≤ 4.4e-16 (1–2 ulp) in 21 of 60 values. This is a test flaw, not a solver defect. The test is now `test_backends_agree`, with tolerances of 1e-13 on solutions and 1e-6 on the FD blocks (forward differences amplify an ulp in F to ~1e-8). validation.md now scopes the bit-identical claim to the reference toolchain. Pushed for re-run.
+- **2026-09-27 — F4.** PR #2's re-run passed all 11 checks: CI on 5 platforms, wheels on 5 platforms, and the sdist. Merged into `main`. **Feature loop complete.**

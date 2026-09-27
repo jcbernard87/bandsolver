@@ -35,6 +35,7 @@ struct NewtonResult {
     std::vector<double> step_norm;       // max |dc| per iteration
     std::vector<double> residual_norm;   // max |G| at the start of each iteration
     std::exception_ptr callback_exception;
+    long residual_evaluations = 0;       // set by newton_fd only
 };
 
 using FillFunction = std::function<void(const double* c, BlockSystem& sys)>;
