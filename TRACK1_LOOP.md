@@ -159,7 +159,7 @@ Spec: [`docs/specs/2026-09-27-performance-options-design.md`](docs/specs/2026-09
 - [x] P2 (PR B) C++ factor/solve (`Factorization`) + tests.
 - [x] P3 (PR B) Fortran factor/solve + C ABI + Python `bs.factor`; tests incl. cross-check.
 - [x] P4 (PR B) Newton `jacobian_reuse` option + residual-only callback (C++, Fortran, Python); tests; Layer 2 reuse rows; PR, CI, merge.
-- [ ] P5 (PR C) C++ adaptive BDF1–2 DAE integrator with options; tests (orders, tolerance, DAE vs IDA, reuse, mask).
+- [x] P5 (PR C) C++ adaptive BDF1–2 DAE integrator with options; tests (orders, tolerance, DAE vs IDA, reuse, mask).
 - [ ] P6 (PR C) Python binding `bs.integrate` + tests + example.
 - [ ] P7 (PR C) Layer 2 benchmarks for all option combinations; docs/benchmarks.md before/after; notebook 5 update; PR, CI, merge.
 - [ ] P8 (follow-up) Fortran port of the integrator.
@@ -182,3 +182,13 @@ Spec: [`docs/specs/2026-09-27-performance-options-design.md`](docs/specs/2026-09
 - **2026-09-27 — P4.** The `jacobian_reuse` option is now in the C++ and Fortran Newton drivers (refresh when a factorization has been used reuse_max_iter times or step_k > contraction·step_{k−1}), with an optional residual-only callback: C++ `ResidualFunction`; Fortran overridable `band_problem%residual` with a default fallback; C `bandsolver_f_newton_ex`; Python `residual=`. `newton_fd` reuse iterations cost 1 residual evaluation. Results report jacobian_evaluations and factorizations.
   - **Tests:** C++ full Newton 9 it / 9 factorizations vs reuse 12 it / 4 factorizations, same root (7e-15); with the residual callback, fills == factorizations. The Fortran FD + reuse run took 8 it, 2 factorizations and 26 evaluations; the C++ and Fortran reuse drivers are identical through the C ABI (12/4/8, diff 0). Python has 10 new tests; pytest 147, ctest 16.
   - **Benchmark (honest):** within each BDF2 step, reuse saves only 12–18% (per step 140–546 µs vs 160–662 µs full Newton; the 1-iteration variant costs 64–242 µs). Each step needs about 3 Newton iterations to a very tight tolerance, and the Python residual dominates. Bigger gains need cross-step reuse and a matched Newton tolerance, which come with the integrator (PR C). docs/benchmarks, api.md and the CHANGELOG are updated. Next: PR B CI and merge, then P5.
+- **2026-09-27 — P4 merged** (PR #9, 11/11 green).
+- **2026-09-27 — P5.** C++ `integrate()` (`bandsolver/integrate.hpp`) for F(t,c,ċ)=0: variable-step BDF order 1–2 (variable-coefficient BDF2; drops to BE when the step ratio exceeds 2.4 for zero stability), a Lagrange predictor with Milne error estimates (1/3, 2/11), a WRMS error norm excluding algebraic entries, step growth in [0.2, 2] with rejection, and exact landing on output times. Newton uses a rate-based stop, IDA-style 2/(1+α/α_J) scaling, and reuses the factorization across steps unless α changes by more than 30% or convergence fails. The Jacobian comes from the user callback or from FD colouring. Every option can be switched: `adaptive`, `max_order`, `jacobian_reuse`.
+  - **Tests (12, all pass; ASan/UBSan clean):**
+    - fixed-step orders: error ratio 2.00 (BDF1) and 4.01 (BDF2) per halving;
+    - adaptive global error: 3.2e-3, 2.0e-4, 9.9e-6 at tol 1e-3, 1e-5, 1e-7, taking 25/85/354 steps. **Calibration:** IDA at max_order=2 on the same problem gives 1×/7×/29× tol with 42/159/737 steps, the same order-2 trend; my first 50×-tol test bound was unrealistic and is now 200×;
+    - stiff λ=1e4: 154 steps;
+    - index-1 DAE from an inconsistent algebraic start: y, z within 6e-6;
+    - heat equation within 3e-5 of the semi-discrete exact solution, with **21 factorizations with reuse vs 151 without**; the FD-Jacobian path is identical (1.7e-16);
+    - option and exception handling.
+  - ctest 17/17. Next: P6 (Python binding).
