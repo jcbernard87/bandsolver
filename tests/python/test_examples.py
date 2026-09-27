@@ -7,6 +7,7 @@ import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "examples"))
 
+import adaptive_integration  # noqa: E402,F401  (exercised in test_integrate.py)
 import fd_jacobian  # noqa: E402
 import nonlinear_bvp  # noqa: E402
 import reaction_diffusion  # noqa: E402

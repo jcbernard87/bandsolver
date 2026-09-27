@@ -16,6 +16,7 @@
 #include <bandsolver/newton.hpp>
 #include <bandsolver/fd.hpp>
 #include <bandsolver/factor.hpp>
+#include <bandsolver/integrate.hpp>
 
 #include "bandsolver_f.h"
 
@@ -368,6 +369,91 @@ py::dict check_jacobian(int n, int nj, const py::function& fill, const Arr& c, d
     return r;
 }
 
+// ---- DAE integration (C++ core) -------------------------------------------------------
+Arr state_array(int n, int nj, const double* src) {
+    Arr a({static_cast<py::ssize_t>(nj), static_cast<py::ssize_t>(n)});
+    std::copy(src, src + static_cast<std::size_t>(n) * nj, a.mutable_data());
+    return a;
+}
+
+py::dict integrate(int n, int nj, const py::function& residual, const std::optional<py::function>& jacobian,
+                   double t0, const Arr& c0, const std::optional<Arr>& cdot0, const std::vector<double>& t_out,
+                   const std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>>& algebraic,
+                   const py::dict& opt) {
+    const py::ssize_t N = static_cast<py::ssize_t>(n) * nj;
+    require_size(c0, N, "c0");
+    const double* cd0 = opt_ptr(cdot0, N, "cdot0");
+    std::vector<char> alg;
+    if (algebraic) {
+        if (algebraic->size() != N) throw std::invalid_argument("algebraic must have shape (nj, n)");
+        alg.assign(algebraic->data(), algebraic->data() + N);
+    }
+    bandsolver::IntegratorOptions o;
+    o.adaptive = opt["adaptive"].cast<bool>();
+    o.max_order = opt["max_order"].cast<int>();
+    o.rtol = opt["rtol"].cast<double>();
+    o.atol = opt["atol"].cast<double>();
+    o.dt = opt["dt"].cast<double>();
+    o.dt0 = opt["dt0"].cast<double>();
+    o.dt_min = opt["dt_min"].cast<double>();
+    o.dt_max = opt["dt_max"].cast<double>();
+    o.jacobian_reuse = opt["jacobian_reuse"].cast<bool>();
+    o.reuse_alpha_change = opt["reuse_alpha_change"].cast<double>();
+    o.max_newton_iter = opt["max_newton_iter"].cast<int>();
+    o.newton_tol = opt["newton_tol"].cast<double>();
+    o.max_steps = opt["max_steps"].cast<int>();
+    o.fd.rel_step = opt["rel_step"].cast<double>();
+    o.fd.typical = opt["typical"].cast<double>();
+
+    bandsolver::DaeResidual R = [&](double t, const double* c, const double* cd, double* F) {
+        Arr f = Arr::ensure(residual(t, state_array(n, nj, c), state_array(n, nj, cd)));
+        if (!f) throw std::invalid_argument("residual(t, c, cdot) must return a numeric array");
+        require_size(f, N, "F");
+        std::copy(f.data(), f.data() + N, F);
+    };
+    bandsolver::DaeJacobian Jf;
+    if (jacobian) {
+        Jf = [&](double t, const double* c, const double* cd, double alpha, bandsolver::BlockSystem& s) {
+            py::object out = (*jacobian)(t, state_array(n, nj, c), state_array(n, nj, cd), alpha);
+            auto seq = out.cast<py::sequence>();
+            if (seq.size() != 3 && seq.size() != 5)
+                throw std::invalid_argument("jacobian(t, c, cdot, alpha) must return (A, B, D) or (A, B, D, X, Y)");
+            const py::ssize_t nb = N * n, nn = static_cast<py::ssize_t>(n) * n;
+            double* dst[5] = {s.A().data(), s.B().data(), s.D().data(), s.X().data(), s.Y().data()};
+            const py::ssize_t sizes[5] = {nb, nb, nb, nn, nn};
+            const char* names[5] = {"A", "B", "D", "X", "Y"};
+            for (std::size_t i = 0; i < seq.size(); ++i) {
+                if (seq[i].is_none()) continue;
+                Arr a = Arr::ensure(seq[i]);
+                if (!a) throw std::invalid_argument(std::string("jacobian output ") + names[i] + " is not numeric");
+                require_size(a, sizes[i], names[i]);
+                std::copy(a.data(), a.data() + sizes[i], dst[i]);
+            }
+        };
+    }
+    auto r = bandsolver::integrate(n, nj, R, Jf, t0, c0.data(), cd0, t_out, alg, o);
+    if (r.callback_exception) std::rethrow_exception(r.callback_exception);
+    Arr Y({static_cast<py::ssize_t>(r.y.size()), static_cast<py::ssize_t>(nj), static_cast<py::ssize_t>(n)});
+    for (std::size_t k = 0; k < r.y.size(); ++k)
+        std::copy(r.y[k].begin(), r.y[k].end(), Y.mutable_data() + k * N);
+    py::dict d;
+    d["status"] = static_cast<int>(r.status);
+    d["message"] = r.message;
+    d["t"] = r.t;
+    d["y"] = Y;
+    d["t_reached"] = r.t_reached;
+    py::dict st;
+    st["steps"] = r.stats.steps;
+    st["rejected_error"] = r.stats.rejected_error;
+    st["rejected_newton"] = r.stats.rejected_newton;
+    st["newton_iterations"] = r.stats.newton_iterations;
+    st["jacobian_evaluations"] = r.stats.jacobian_evaluations;
+    st["factorizations"] = r.stats.factorizations;
+    st["residual_evaluations"] = r.stats.residual_evaluations;
+    d["stats"] = st;
+    return d;
+}
+
 // One factorization, from either backend.
 class PyFactorization {
 public:
@@ -444,6 +530,8 @@ PYBIND11_MODULE(_core, m) {
         .def_property_readonly("n", &PyFactorization::n)
         .def_property_readonly("nj", &PyFactorization::nj)
         .def_property_readonly("backend", &PyFactorization::backend);
+    m.def("integrate", &integrate, py::arg("n"), py::arg("nj"), py::arg("residual"), py::arg("jacobian"),
+          py::arg("t0"), py::arg("c0"), py::arg("cdot0"), py::arg("t_out"), py::arg("algebraic"), py::arg("options"));
     m.def("fd_jacobian", &fd_jacobian, py::arg("n"), py::arg("nj"), py::arg("residual"), py::arg("c"),
           py::arg("rel_step"), py::arg("typical"), py::arg("backend"));
     m.def("newton_fd", &newton_fd, py::arg("n"), py::arg("nj"), py::arg("residual"), py::arg("c0"), py::arg("rtol"),

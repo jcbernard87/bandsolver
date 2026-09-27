@@ -98,6 +98,30 @@ The option is off by default.
 
 In every interface, results gain `jacobian_evaluations` and `factorizations`.
 
+## Adaptive DAE integrator (C++ core, Python)
+
+This solves $F(t, c, \dot c) = 0$ with variable-step BDF of order 1–2 (`<bandsolver/integrate.hpp>`, `bs.integrate`). A Fortran port is planned.
+
+```python
+r = bs.integrate(residual, c0, t_out, *, jacobian=None, algebraic=None, cdot0=None, t0=0.0,
+                 adaptive=True, max_order=2, rtol=1e-6, atol=1e-8, dt=None, dt0=None, dt_min=0, dt_max=None,
+                 jacobian_reuse=True, reuse_alpha_change=0.3, max_newton_iter=4, newton_tol=0.33,
+                 max_steps=1_000_000)
+#   residual(t, c, cdot) -> F ; jacobian(t, c, cdot, alpha) -> (A, B, D[, X, Y]) of dF/dc + alpha dF/dcdot
+#   r.t, r.y (len(t), nj, n), r.stats {steps, rejected_error, rejected_newton, newton_iterations,
+#                                      jacobian_evaluations, factorizations, residual_evaluations}
+```
+
+**Options:**
+- `adaptive=False` gives fixed-step BDF with step `dt`.
+- `jacobian_reuse=False` refactors at every Newton iteration.
+- If `jacobian` is omitted, the Jacobian is built by finite-difference colouring.
+- `algebraic` flags the entries (for example potentials) that are excluded from error control.
+
+**Errors:** an early stop raises `IntegrationError` with `.result`.
+
+In C++, the equivalent is `integrate(n, nj, residual, jacobian, t0, c0, cdot0, t_out, algebraic, IntegratorOptions)`, which returns an `IntegrationResult`.
+
 ## Finite-difference Jacobians (all interfaces)
 
 These build `A, B, D, X, Y` and `G = −F` from a residual `F(c)` using 3n + 1 residual evaluations; see [math.md](math.md#finite-difference-jacobians). Options are `rel_step` (default √ε) and `typical` (default 1).

@@ -160,7 +160,7 @@ Spec: [`docs/specs/2026-09-27-performance-options-design.md`](docs/specs/2026-09
 - [x] P3 (PR B) Fortran factor/solve + C ABI + Python `bs.factor`; tests incl. cross-check.
 - [x] P4 (PR B) Newton `jacobian_reuse` option + residual-only callback (C++, Fortran, Python); tests; Layer 2 reuse rows; PR, CI, merge.
 - [x] P5 (PR C) C++ adaptive BDF1–2 DAE integrator with options; tests (orders, tolerance, DAE vs IDA, reuse, mask).
-- [ ] P6 (PR C) Python binding `bs.integrate` + tests + example.
+- [x] P6 (PR C) Python binding `bs.integrate` + tests + example.
 - [ ] P7 (PR C) Layer 2 benchmarks for all option combinations; docs/benchmarks.md before/after; notebook 5 update; PR, CI, merge.
 - [ ] P8 (follow-up) Fortran port of the integrator.
 
@@ -192,3 +192,8 @@ Spec: [`docs/specs/2026-09-27-performance-options-design.md`](docs/specs/2026-09
     - heat equation within 3e-5 of the semi-discrete exact solution, with **21 factorizations with reuse vs 151 without**; the FD-Jacobian path is identical (1.7e-16);
     - option and exception handling.
   - ctest 17/17. Next: P6 (Python binding).
+- **2026-09-27 — P6.** Python `bs.integrate(residual, c0, t_out, jacobian=..., algebraic=..., adaptive, max_order, rtol, atol, dt, jacobian_reuse, ...)` returning an `IntegrationResult` (t, y, stats); `IntegrationError` carries partial results; callback exceptions propagate. `examples/adaptive_integration.py` covers the binary-electrolyte DAE (φ algebraic).
+  - **Example results** (vs the analytic series; the errors include spatial discretization):
+    - fixed BDF2, dt = 0.01: error 2.1e-5; **74 ms without reuse (724 factorizations) vs 32 ms with reuse (2 factorizations)**;
+    - adaptive, rtol = 1e-6: error 8e-4; 164 steps; **33 ms without reuse (337 factorizations) vs 16 ms with reuse (34)**.
+  - **Tests:** 6 new (orders 2.0/4.0, outputs, FD vs analytic Jacobian, DAE with reuse on/off, errors); pytest 153. api.md and the CHANGELOG are updated. Next: P7 (benchmarks + docs + PR C).

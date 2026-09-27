@@ -40,6 +40,9 @@ __all__ = [
     "fd_jacobian",
     "newton_fd",
     "check_jacobian",
+    "integrate",
+    "IntegrationResult",
+    "IntegrationError",
 ]
 
 BACKENDS = ("cpp", "fortran")
@@ -233,6 +236,106 @@ def factor(A, B, D, X=None, Y=None, *, backend: str = "cpp") -> Factorization:
     core = _core.Factorization(n, nj, A, B, D, X, Y, backend)
     _raise_for(core.status, core.fail_node, "factor")
     return Factorization(core, n, nj)
+
+
+@dataclass
+class IntegrationResult:
+    """Result of :func:`integrate`: ``y[k]`` (shape ``(nj, n)``) is the solution at ``t[k]``.
+
+    ``stats`` counts steps, rejected steps (error test / Newton failure), Newton iterations,
+    Jacobian evaluations, factorizations and residual evaluations.
+    """
+
+    t: np.ndarray
+    y: np.ndarray
+    stats: dict
+    status: int = 0
+    message: str = ""
+
+
+class IntegrationError(BandError):
+    """The integrator stopped early; ``result`` holds the outputs reached so far."""
+
+    def __init__(self, message: str, status: int, result: IntegrationResult):
+        super().__init__(message, status)
+        self.result = result
+
+
+def integrate(
+    residual: Callable[[float, np.ndarray, np.ndarray], np.ndarray],
+    c0,
+    t_out,
+    *,
+    t0: float = 0.0,
+    jacobian: Optional[Callable] = None,
+    cdot0=None,
+    algebraic=None,
+    adaptive: bool = True,
+    max_order: int = 2,
+    rtol: float = 1e-6,
+    atol: float = 1e-8,
+    dt: Optional[float] = None,
+    dt0: Optional[float] = None,
+    dt_min: float = 0.0,
+    dt_max: Optional[float] = None,
+    jacobian_reuse: bool = True,
+    reuse_alpha_change: float = 0.3,
+    max_newton_iter: int = 4,
+    newton_tol: float = 0.33,
+    max_steps: int = 1_000_000,
+    rel_step: float = None,
+    typical: float = 1.0,
+) -> IntegrationResult:
+    """Integrate the DAE ``F(t, c, cdot) = 0`` with BDF of order 1–2 (C++ core).
+
+    Parameters
+    ----------
+    residual : ``residual(t, c, cdot) -> F``, all arrays of shape ``(nj, n)``. Rows involve only
+        neighbouring nodes (the BAND stencil, with the usual X/Y reach at the ends).
+    c0 : initial state ``(nj, n)``. Algebraic entries may be inconsistent; the first step
+        corrects them.
+    t_out : increasing output times (> ``t0``); steps land exactly on them.
+    jacobian : optional ``jacobian(t, c, cdot, alpha) -> (A, B, D[, X, Y])`` for
+        ``dF/dc + alpha dF/dcdot``. If omitted, finite differences are used (3n + 1 residual
+        calls per Jacobian).
+    algebraic : optional boolean ``(nj, n)`` mask of algebraic entries (excluded from the
+        error test).
+    adaptive : ``True`` for error-controlled steps (``rtol``, ``atol``), ``False`` for a fixed
+        step ``dt``. max_order : 1 (backward Euler) or 2 (BDF2).
+    jacobian_reuse : keep one factorization across Newton iterations and steps while it
+        converges and ``alpha`` changes by less than ``reuse_alpha_change``.
+
+    Raises :class:`IntegrationError` (with ``.result``) if the integration stops early;
+    exceptions from the callbacks propagate unchanged.
+    """
+    c0 = _state(c0, "c0")
+    nj, n = c0.shape
+    t_out = np.atleast_1d(np.asarray(t_out, dtype=np.float64))
+    if t_out.ndim != 1 or t_out.size == 0:
+        raise ValueError("t_out must be a non-empty 1-D sequence of times")
+    if not adaptive and not (dt and dt > 0):
+        raise ValueError("fixed-step integration (adaptive=False) needs dt > 0")
+    if max_order not in (1, 2):
+        raise ValueError("max_order must be 1 or 2")
+    cdot0 = None if cdot0 is None else _as_blocks(cdot0, "cdot0", (nj, n))
+    if algebraic is not None:
+        algebraic = np.ascontiguousarray(algebraic, dtype=bool)
+        if algebraic.shape != (nj, n):
+            raise ValueError(f"algebraic must have shape {(nj, n)}, got {algebraic.shape}")
+    options = dict(adaptive=bool(adaptive), max_order=int(max_order), rtol=float(rtol), atol=float(atol),
+                   dt=float(dt or 0.0), dt0=float(dt0 or 0.0), dt_min=float(dt_min), dt_max=float(dt_max or 0.0),
+                   jacobian_reuse=bool(jacobian_reuse), reuse_alpha_change=float(reuse_alpha_change),
+                   max_newton_iter=int(max_newton_iter), newton_tol=float(newton_tol), max_steps=int(max_steps),
+                   rel_step=float(rel_step if rel_step is not None else _SQRT_EPS), typical=float(typical))
+    r = _core.integrate(n, nj, residual, jacobian, float(t0), c0, cdot0, [float(x) for x in t_out], algebraic,
+                        options)
+    result = IntegrationResult(t=np.asarray(r["t"]), y=np.asarray(r["y"]), stats=dict(r["stats"]),
+                               status=int(r["status"]), message=str(r["message"]))
+    if result.status == _INVALID:
+        raise ValueError(f"integrate: {result.message}")
+    if result.status != _OK:
+        raise IntegrationError(f"integrate: {result.message} at t = {r['t_reached']:.6g}", result.status, result)
+    return result
 
 
 FillResult = Sequence[Optional[np.ndarray]]
