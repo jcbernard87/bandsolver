@@ -58,3 +58,7 @@ add_test(NAME test_factor_cpp COMMAND test_factor_cpp)
 add_executable(test_reuse_cpp cpp/test_reuse.cpp)
 target_link_libraries(test_reuse_cpp PRIVATE bandsolver_cpp)
 add_test(NAME test_reuse_cpp COMMAND test_reuse_cpp)
+
+add_executable(test_integrate_cpp cpp/test_integrate.cpp)
+target_link_libraries(test_integrate_cpp PRIVATE bandsolver_cpp)
+add_test(NAME test_integrate_cpp COMMAND test_integrate_cpp)

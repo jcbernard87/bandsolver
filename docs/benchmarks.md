@@ -20,7 +20,7 @@ All timings come from one machine and are indicative; the ratios are more portab
 
 - **Linear solves (layer 1).**
   - BAND is the fastest method tested at every size: n = 1–30 unknowns per node, nj = 25–2000 nodes.
-  - It is **1.6–5.8× faster than LAPACK's banded solver** (median 2.4×) and **2.4–12× faster than SciPy's SuperLU** (median 4.8×).
+  - It is **1.6–3.9× faster than LAPACK's banded solver** (median 2.4×) and **2.3–8.8× faster than SciPy's SuperLU** (median 4.6×).
   - It needs up to **9× less memory** than banded LAPACK.
   - Calling it from Python adds about 5 µs per call, which is negligible beyond about 200 nodes.
 - **Transient simulation (layer 2).**
@@ -28,6 +28,10 @@ All timings come from one machine and are indicative; the ratios are more portab
   - **Loose to moderate accuracy** (errors above about 1e-4 mol/m³, i.e. 1e-6 relative), it is also the **fastest overall**.
   - **Tighter accuracy:** SUNDIALS IDA and SciPy's BDF win, because variable step size and order (up to 5) need far fewer steps than fixed-step BDF2.
   - The gap is in **time-integration strategy**, not linear algebra.
+- **Built-in integrator (`bs.integrate`, since 0.1.2).**
+  - Carrying one factorization across time steps makes **fixed-step BDF2 up to 3.6× faster** than the user-written full-Newton loop (3.0–3.6× at Δt ≤ 0.01), at identical accuracy. It also has the **cheapest step of any stack at every mesh size** (45–152 µs, vs IDA's 87–236 µs).
+  - Turning Jacobian reuse off costs 1.8–2.5×.
+  - Adaptive BDF1–2 is about as fast as IDA per step. It resolves the start-up transient accurately, but at order 2 it needs many more steps than IDA's order 5 for a given final-time error; see [its section](#built-in-integrator-options-bsintegrate).
 
 ## Layer 1: one linear block solve
 
@@ -52,11 +56,11 @@ Converting the blocks into each library's input format is **excluded** from the 
 
 | n | nj | BAND C++ (Python) | BAND C++ native | BAND Fortran (Python) | LAPACK banded | SuperLU | dense |
 |---|---|---|---|---|---|---|---|
-| 1 | 100 | 0.008 | 0.004 | 0.013 | 0.024 | 0.060 | 0.047 |
-| 3 | 200 | 0.039 | 0.034 | 0.055 | 0.105 | 0.228 | 1.97 |
-| 5 | 500 | 0.273 | 0.258 | 0.385 | 0.506 | 1.24 | 103 |
-| 10 | 1000 | 1.93 | 1.78 | 3.06 | 4.97 | 9.60 | – |
-| 30 | 2000 | 54.6 | 56.4 | 87.0 | 110 | 131 | – |
+| 1 | 100 | 0.008 | 0.004 | 0.013 | 0.024 | 0.059 | 0.047 |
+| 3 | 200 | 0.039 | 0.034 | 0.055 | 0.095 | 0.222 | 1.67 |
+| 5 | 500 | 0.273 | 0.260 | 0.278 | 0.499 | 1.10 | 83.2 |
+| 10 | 1000 | 1.80 | 1.83 | 2.43 | 5.22 | 9.25 | – |
+| 30 | 2000 | 55.6 | 53.1 | 61.6 | 112 | 133 | – |
 
 **Observations:**
 
@@ -117,11 +121,11 @@ The first two columns come from `results/linear.csv` (nj = 100 and 2000); the la
 
 **Cost per time step** (µs, from mesh scaling at fixed settings):
 
-| nj | BDF2, 1 iter | BDF2, full Newton | IDA (rtol 1e-6) | SciPy (rtol 1e-6) |
-|---|---|---|---|---|
-| 41 | **64** | 160 | 90 | 105 |
-| 321 | **100** | 272 | 134 | 156 |
-| 1281 | 242 | 662 | **238** | 326 |
+| nj | BDF2, 1 iter | BDF2, full Newton | `integrate` fixed BDF2, reuse | `integrate` adaptive, reuse (rtol 1e-6) | IDA (rtol 1e-6) | SciPy (rtol 1e-6) |
+|---|---|---|---|---|---|---|
+| 41 | 63 | 161 | **45** | 87 | 87 | 100 |
+| 321 | 102 | 273 | **70** | 140 | 138 | 156 |
+| 1281 | 232 | 625 | **152** | 311 | 236 | 320 |
 
 The total-time panel compares runs at *different* accuracies, so use the per-step panel to compare cost.
 
@@ -142,21 +146,64 @@ The option is `jacobian_reuse=True`, with `reuse_max_iter` (default 5) and `reus
 | Δt = 0.002: error / time | 2.9e-7 / 416 ms | 2.9e-7 / 364 ms | 2.9e-7 / 171 ms |
 | cost per step, nj = 41 / 1281 | 160 / 662 µs | 140 / 546 µs | 64 / 242 µs |
 
-Within a single time step, reuse saves **12–18%**. Each step needs only about 3 Newton iterations and its Newton tolerance is very tight (rtol = 1e-10), so the cost per iteration of evaluating the residual in Python dominates. Larger savings need the factorization carried **across time steps** and a Newton tolerance matched to the step's accuracy. Both are the job of the adaptive integrator (next).
+Within a single time step, reuse saves **12–18%**. Each step needs only about 3 Newton iterations and its Newton tolerance is very tight (rtol = 1e-10), so the cost per iteration of evaluating the residual in Python dominates. Larger savings need the factorization carried **across time steps** and a Newton tolerance matched to the step's accuracy. Both are the job of the built-in integrator (below).
 
 On static nonlinear problems the effect is clearer, e.g. the n = 3, nj = 40 test problem:
 - **full Newton:** 9 iterations with 9 factorizations;
 - **with reuse:** 12 iterations but only 4 factorizations;
 - **with finite-difference Jacobians:** reuse iterations cost 1 residual evaluation instead of 3n + 1 = 10 (26 vs about 50 evaluations in the Fortran test).
 
+### Built-in integrator options (`bs.integrate`)
+
+`bs.integrate` wraps the BDF step, Newton iteration and step-size control around the factor/solve split. Its options switch independently:
+- `adaptive` (local error control) or a fixed `dt`;
+- `max_order` 1 (backward Euler) or 2;
+- `jacobian_reuse` across Newton iterations **and** time steps. The Jacobian is refreshed when α = ∂ċ/∂c changes by more than 30% or Newton stalls.
+
+The Newton tolerance is tied to the error tolerance (IDA-style), not fixed at 1e-10. All runs use the same analytic Jacobian callback as the user-written loops.
+
+**Fixed-step BDF2** (nj = 81, error in mol/m³ and wall time for the whole transient). The "standard" column is the user-written full-Newton loop from the table above.
+
+| Δt | error (all runs) | standard: full Newton | `integrate`, reuse | `integrate`, no reuse | 1 Newton iteration/step |
+|---|---|---|---|---|---|
+| 0.1 | 8.1e-4 | 9.2 ms | 5.5 ms (4 Jacobians) | 10.0 ms | **3.4 ms** |
+| 0.01 | 7.4e-6 | 89.6 ms | **29.8 ms** (2 Jacobians) | 68.4 ms | 33.7 ms |
+| 0.002 | 2.9e-7 | 414 ms | **115 ms** | 250 ms | 169 ms |
+| 0.001 | 7.3e-8 | 807 ms | **227 ms** | 487 ms | 337 ms |
+
+- **Reuse across steps.** With a constant Δt, α is constant, so 2–4 Jacobians serve the whole run. Each step then costs about 1.2 residual evaluations plus cheap re-solves. The result is 1.7× (Δt = 0.1) to 3.6× (Δt ≤ 0.005) faster than the standard loop, and faster than the one-iteration shortcut at Δt ≤ 0.01. Unlike that shortcut, it still converges each step to a tolerance.
+- **Accuracy.** Errors match the standard loop to all printed digits: reuse changes the cost, not the solution.
+
+**Adaptive BDF1–2** (atol = rtol·c₀):
+
+| rtol | steps | error at t = 5 s | reuse | no reuse | IDA at the same rtol |
+|---|---|---|---|---|---|
+| 1e-6 | 133 | 1.3e-3 | **12.3 ms** (32 Jacobians) | 25.9 ms (275) | 2.4e-5 in 13.8 ms |
+| 1e-8 | 559 | 6.9e-5 | **45.3 ms** (42) | 107 ms (1129) | 7.2e-7 in 27.9 ms |
+| 1e-10 | 2521 | 3.3e-6 | **195 ms** (50) | 479 ms (5057) | 2.3e-8 in 50.6 ms |
+
+- **Reuse:** it is 2.1–2.5× faster with identical steps (1.6× at the loosest rtol), and the Jacobian count drops about 100-fold.
+- **Adaptive vs fixed step on this metric.** At a similar step count, fixed Δt = 0.01 (500 steps) reaches 7.4e-6 at t = 5 s, better than adaptive rtol 1e-8 (559 steps, 6.9e-5).
+- **Why the adaptive run looks worse.** It is not an estimator defect: the adaptive run spends about 200 of its steps on the start-up transient (t < 0.1 s), where the boundary flux switches on. The final-time error does not reward that effort, because diffusion damps early errors. At earlier output times the picture reverses:
+
+  | error at t = | 0.02 s | 0.1 s | 0.5 s | 5 s |
+  |---|---|---|---|---|
+  | adaptive, rtol 1e-8 (562 steps) | **1.0e-4** | **1.1e-4** | **1.1e-4** | 6.9e-5 |
+  | fixed Δt = 0.01 (500 steps) | 9.0e-2 | 5.0e-3 | 8.9e-4 | **7.4e-6** |
+
+  Use adaptive stepping when intermediate times matter or the dynamics are not known in advance, for example when a load changes. Use a fixed step for smooth long runs judged only at the end.
+- **Versus IDA.** Per step, the adaptive integrator costs the same as IDA. At the same rtol IDA takes a similar number of steps but is 50–140× more accurate. For the same final-time error it needs about 8× fewer steps (2.4e-5 in 143 steps vs 1.5e-5 in 1182), because it raises the order up to 5. An order-3+ extension, or BAND as IDA's linear solver, is where the remaining gap lies.
+- **Backward Euler** (`max_order=1`) is included in the CSV. Being first order, it needs up to 17× more steps than BDF1–2 at the same rtol and is less accurate, so it is not plotted.
+
 ## Conclusions
 
 1. As a **linear kernel**, BAND is the best of the options tested for 1-D block-banded systems: faster, and much leaner in memory.
-2. For **transient simulations**, BAND with simple fixed-step BDF2 is competitive, and fastest at engineering accuracy. Its cheap steps make it attractive for long, moderately accurate runs, such as battery cycling. For tight tolerances, use adaptive high-order integration.
-3. **Where to take it next:** combine the two.
-   - Add adaptive step-size control and Jacobian reuse to the bandsolver driver;
+2. For **transient simulations**, BAND with fixed-step BDF2 is competitive, and fastest at engineering accuracy. The built-in `bs.integrate` with Jacobian reuse gives the cheapest step of all the stacks tested, and makes fixed-step BDF2 2.8–3.6× faster than a hand-written full-Newton loop. Its cheap steps make it attractive for long, moderately accurate runs, such as battery cycling. For tight tolerances, use adaptive high-order integration (IDA).
+3. **Where to take it next:**
+   - raise the adaptive integrator's order beyond 2;
    - use BAND as the linear solver inside SUNDIALS IDA (a custom `SUNLinearSolver`);
-   - write residuals natively (C++/Fortran) to remove the Python fill cost that dominates small problems.
+   - write residuals natively (C++/Fortran) to remove the Python fill cost that dominates small problems;
+   - port the integrator to Fortran.
 
 ## Fairness notes and limitations
 

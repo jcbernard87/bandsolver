@@ -2,7 +2,15 @@
 
 ## Unreleased
 
+### Changed
+- Layer 1 benchmark figures refreshed from the rerun made with the Fortran fast kernel: BAND is 1.6–3.9× faster than banded LAPACK (was quoted as up to 5.8×) and 2.3–8.8× faster than SuperLU (was up to 12×). Medians are unchanged within noise.
+
 ### Added
+- **Adaptive DAE integrator** (`bs.integrate`, C++ `integrate()`): variable-step BDF of order 1–2 with local error control, an algebraic-variable mask and exact output times. Jacobians come from a user callback or from finite differences.
+  - Switchable options: `adaptive`, `max_order`, `jacobian_reuse` (across steps).
+  - New example: `examples/adaptive_integration.py`.
+  - A Fortran port is planned.
+  - **Benchmarked** (`docs/benchmarks.md`, notebook 5): with Jacobian reuse, fixed-step BDF2 is up to 3.6× faster than a hand-written full-Newton loop at identical accuracy, and has the cheapest time step of all the stacks tested. Turning reuse off costs 1.6–2.5×. Adaptive BDF1–2 matches IDA's cost per step but needs more steps at tight final-time tolerances (order ≤ 2).
 - **Factor/solve split:** `factor()` / `Factorization` in C++, Fortran, the C ABI (opaque handle) and Python (`bs.factor`). A re-solve is 2–12× cheaper than a one-shot solve.
 - **Jacobian reuse option** (modified Newton; off by default): `jacobian_reuse`, `reuse_max_iter`, `reuse_contraction`, and an optional residual-only callback (`bandsolver_f_newton_ex` in C; the `band_problem%residual` override in Fortran).
   - `newton_fd` with reuse spends one residual evaluation per reuse iteration.
