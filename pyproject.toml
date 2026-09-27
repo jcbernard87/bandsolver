@@ -14,7 +14,8 @@ authors = [{ name = "John Bernard" }]
 dependencies = ["numpy>=1.22"]
 
 [project.optional-dependencies]
-test = ["pytest"]
+test = ["pytest", "nbformat", "nbclient", "ipykernel", "matplotlib"]
+notebooks = ["jupyterlab", "matplotlib"]
 
 [tool.scikit-build]
 wheel.packages = ["python/bandsolver"]

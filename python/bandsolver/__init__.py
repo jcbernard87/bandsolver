@@ -22,6 +22,8 @@ import numpy as np
 
 from . import _core
 
+__version__ = "0.1.0"
+
 __all__ = [
     "BACKENDS",
     "BandError",
