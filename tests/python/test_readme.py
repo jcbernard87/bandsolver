@@ -6,7 +6,7 @@ import numpy as np
 
 
 def test_readme_python_snippet():
-    text = (pathlib.Path(__file__).resolve().parents[2] / "README.md").read_text()
+    text = (pathlib.Path(__file__).resolve().parents[2] / "README.md").read_text(encoding="utf-8")
     code = re.search(r"```python\n(.*?)```", text, re.S).group(1)
     ns = {}
     exec(compile(code.replace("print(", "(lambda *a: None)("), "README", "exec"), ns)
