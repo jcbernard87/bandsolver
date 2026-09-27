@@ -119,7 +119,7 @@ Spec: [`docs/specs/2026-09-27-fd-jacobian-design.md`](docs/specs/2026-09-27-fd-j
 Spec: [`docs/specs/2026-09-27-benchmarks-design.md`](docs/specs/2026-09-27-benchmarks-design.md). Work on the branch and merge via a PR. Benchmarks run locally; CI only smoke-tests the scripts.
 - [x] B1 Harness: `benchmarks/` layout, pinned `requirements.txt`, `env.py`, native C++ timing harness + CMake option; smoke test.
 - [x] B2 Layer 1: `linear.py` (BAND py/native, LAPACK band, SuperLU, dense), backward-error check, sweep → `results/linear.csv`, plots.
-- [ ] B3 Layer 2 models: bandsolver BE/BDF2, IDA DAE (band), SciPy BDF reduced ODE; verify all agree on the same discrete solution.
+- [x] B3 Layer 2 models: bandsolver BE/BDF2, IDA DAE (band), SciPy BDF reduced ODE; verify all agree on the same discrete solution.
 - [ ] B4 Layer 2 sweeps: work-precision + mesh scaling → `results/transient*.csv`, plots.
 - [ ] B5 `docs/benchmarks.md`, notebook 05 (reads the CSVs), README link, CI smoke test; PR, CI, merge.
 
@@ -134,3 +134,11 @@ Spec: [`docs/specs/2026-09-27-benchmarks-design.md`](docs/specs/2026-09-27-bench
   - **Finding:** the Fortran core is 1.5–2.2× slower than C++ *natively*, not just because of the C-ABI transposes. Its loops follow the legacy row-major order, which is cache-unfriendly in column-major Fortran. **Follow-up TODO:** optimise the partial-pivot path's loop order (legacy mode must keep its operation order).
 
   Next: B3.
+- **2026-09-27 — B3.** Added `benchmarks/transient.py`. One `Model` class holds the notebook-2 finite-volume discretization (nj=81, t_end=5 s), and there are three stacks:
+  - `run_bandsolver`: BE or BDF2 with fixed Δt, analytic blocks;
+  - `run_ida`: IDA via scikit-sundae, band solver with lband=uband=3, `algebraic_idx`=φ, `calc_initcond='yp0'`;
+  - `run_scipy`: BDF on the reduced ODE, φ eliminated exactly per face, tridiagonal `jac_sparsity`.
+
+  **Consistency against an IDA rtol=1e-12 reference:** IDA at 1e-10 differs by 2.3e-8 mol/m³, SciPy at 1e-10 by 6.7e-8, bandsolver BDF2 at Δt=1e-4 by 1.3e-9, and BE at Δt=1e-4 by 1.3e-5 (its O(Δt) error). All stacks share one discrete solution. The DAE and the reduced ODE are equivalent, as designed.
+
+  Early signal: for tight accuracy, fixed-step BE/BDF2 needs 50k steps (7 s), where adaptive IDA/SciPy need 365–710 steps (0.05 s). Next: B4 (work-precision and mesh sweeps).
