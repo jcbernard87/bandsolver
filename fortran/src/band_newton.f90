@@ -49,6 +49,7 @@ module bandsolver_newton
         real(dp), allocatable :: update_norm(:)    !< scaled max |dc|/(atol+rtol|c|), per iteration
         real(dp), allocatable :: step_norm(:)      !< max |dc|, per iteration
         real(dp), allocatable :: residual_norm(:)  !< max |G| at the start of each iteration
+        integer :: residual_evaluations = 0        !< set by band_newton_fd only
     end type newton_result
 
 contains

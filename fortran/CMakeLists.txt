@@ -1,6 +1,7 @@
 add_library(bandsolver_f
   src/band_kernel.f90
   src/band_newton.f90
+  src/band_fd.f90
   src/band_capi.f90)
 target_include_directories(bandsolver_f PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_options(bandsolver_f PRIVATE

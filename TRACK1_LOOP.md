@@ -85,7 +85,7 @@ Spec: [`docs/specs/2026-09-26-band-library-design.md`](docs/specs/2026-09-26-ban
 ## Feature loop: finite-difference Jacobians (branch `fd-jacobian`)
 Spec: [`docs/specs/2026-09-27-fd-jacobian-design.md`](docs/specs/2026-09-27-fd-jacobian-design.md). Same rules as above. Work on the branch and merge via a PR once CI is green.
 - [x] F1 C++ core: `fd_jacobian`, `fd_fill`, `newton_fd`, `check_jacobian` + tests (analytic match incl. nj=3 X/Y, eval counts, planted-error detection, convergence).
-- [ ] F2 Fortran core + C ABI: `band_residual_problem`, `band_fd_jacobian`, `band_newton_fd`, `band_check_jacobian`, `bandsolver_f_fd_jacobian`, `bandsolver_f_newton_fd` + tests; cross-check against C++.
+- [x] F2 Fortran core + C ABI: `band_residual_problem`, `band_fd_jacobian`, `band_newton_fd`, `band_check_jacobian`, `bandsolver_f_fd_jacobian`, `bandsolver_f_newton_fd` + tests; cross-check against C++.
 - [ ] F3 Python: `fd_jacobian`, `newton_fd`, `check_jacobian` on both backends + pytest; FD example; docs (api, math, README, validation).
 - [ ] F4 Open a PR, wait for green CI and wheels on all platforms, merge; update the handoff.
 
@@ -99,3 +99,10 @@ Spec: [`docs/specs/2026-09-27-fd-jacobian-design.md`](docs/specs/2026-09-27-fd-j
   - ctest passes 10/10, and the new tests are clean under ASan/UBSan.
 
   Next: F2.
+- **2026-09-27 — F2.** Added the Fortran module `bandsolver_fd` (`fortran/src/band_fd.f90`): the abstract `band_residual_problem` type, `fd_options`, `band_fd_jacobian`, `band_newton_fd` (through an internal fill adapter) and `band_check_jacobian` (1-based locations, row-scaled metric). `newton_result` gains `residual_evaluations`. The C ABI gains `bandsolver_f_default_fd_options`, `bandsolver_f_fd_jacobian`, `bandsolver_f_newton_fd` and `bandsolver_f_check_jacobian`, with the new structs in `bandsolver_f.h`. Test results:
+  - `test_fd` (Fortran): the finite-difference blocks match analytic for n ∈ {1,3}, nj ∈ {3,4,5,10} with 3n+1 evaluations; `band_newton_fd` matches analytic Newton to 4e-16 with (3n+1) evaluations per iteration; a correct fill scores 1.3e-6; the planted error is located at node 5, row 2, column 3 (1-based); the missing X entry is detected; errors and invalid options are handled.
+  - `test_fd_cross`: **the C++ and Fortran results are bit-identical**, covering the Jacobian blocks, the Newton iterates and evaluation counts (9 iterations, 90 evaluations each), and the check report (same location after the 1-based offset, same score).
+  - Shared test problem moved to `tests/cpp/fd_problem.hpp`.
+  - ctest passes 12/12 in both Release and the Fortran `-fcheck=all` + FPE-trap build.
+
+  Next: F3.

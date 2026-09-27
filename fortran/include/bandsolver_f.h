@@ -57,6 +57,44 @@ int bandsolver_f_newton(int n, int nj, bandsolver_fill_fn fill, void *ctx, doubl
                         const bandsolver_newton_options *opts, bandsolver_newton_result *res,
                         double *update_history, double *step_history, double *residual_history);
 
+/* ---- Finite-difference Jacobians (see docs/math.md) ---------------------------------- */
+
+/* Residual callback: evaluate F(c) ([nj][n]). Return nonzero to abort. */
+typedef int (*bandsolver_residual_fn)(int n, int nj, const double *c, double *F, void *ctx);
+
+typedef struct {
+    double rel_step;           /* default sqrt(eps) = 1.4901161193847656e-8 */
+    double typical;            /* default 1 */
+} bandsolver_fd_options;
+
+typedef struct {               /* error = |user-fd| / max(|user|, |fd|, 1e-3*rowscale) */
+    double error;
+    int node, row, col;        /* 1-based; 0 if the block has no entries */
+    double user, fd;
+} bandsolver_jacobian_mismatch;
+
+typedef struct {
+    bandsolver_jacobian_mismatch A, B, D, X, Y;
+} bandsolver_jacobian_check;
+
+void bandsolver_f_default_fd_options(bandsolver_fd_options *opts);
+
+/* Blocks by finite differences (3n+1 residual evaluations) and G = -F(c). fd_opts and
+ * evaluations may be NULL. Output layout as for bandsolver_f_solve. */
+int bandsolver_f_fd_jacobian(int n, int nj, bandsolver_residual_fn residual, void *ctx, const double *c,
+                             const bandsolver_fd_options *fd_opts, double *A, double *B, double *D,
+                             double *G, double *X, double *Y, long *evaluations);
+
+/* Newton with finite-difference Jacobians. fd_opts, histories and evaluations may be NULL. */
+int bandsolver_f_newton_fd(int n, int nj, bandsolver_residual_fn residual, void *ctx, double *c,
+                           const bandsolver_newton_options *opts, const bandsolver_fd_options *fd_opts,
+                           bandsolver_newton_result *res, double *update_history, double *step_history,
+                           double *residual_history, long *evaluations);
+
+/* Compare a fill callback's blocks with finite differences of its own G. fd_opts may be NULL. */
+int bandsolver_f_check_jacobian(int n, int nj, bandsolver_fill_fn fill, void *ctx, const double *c,
+                                const bandsolver_fd_options *fd_opts, bandsolver_jacobian_check *check);
+
 #ifdef __cplusplus
 }
 #endif

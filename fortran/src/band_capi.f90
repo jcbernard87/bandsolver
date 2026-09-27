@@ -4,6 +4,7 @@ module bandsolver_capi
     use, intrinsic :: iso_c_binding
     use bandsolver_kernel
     use bandsolver_newton
+    use bandsolver_fd
     implicit none
     private
 
@@ -26,6 +27,38 @@ module bandsolver_capi
             type(c_ptr), value :: ctx
         end function c_fill_iface
     end interface
+
+    type, bind(c) :: c_fd_options
+        real(c_double) :: rel_step, typical
+    end type c_fd_options
+
+    type, bind(c) :: c_mismatch
+        real(c_double) :: error
+        integer(c_int) :: node, row, col
+        real(c_double) :: user, fd
+    end type c_mismatch
+
+    type, bind(c) :: c_jacobian_check
+        type(c_mismatch) :: A, B, D, X, Y
+    end type c_jacobian_check
+
+    abstract interface
+        integer(c_int) function c_residual_iface(n, nj, c, F, ctx) bind(c)
+            import :: c_int, c_double, c_ptr
+            integer(c_int), value :: n, nj
+            real(c_double), intent(in) :: c(*)
+            real(c_double) :: F(*)
+            type(c_ptr), value :: ctx
+        end function c_residual_iface
+    end interface
+
+    !> Adapts a C residual callback + context to band_residual_problem.
+    type, extends(band_residual_problem) :: c_residual_problem
+        type(c_funptr) :: cres = c_null_funptr
+        type(c_ptr) :: ctx = c_null_ptr
+    contains
+        procedure :: residual => c_residual_eval
+    end type c_residual_problem
 
     !> Adapts a C callback + context to the Fortran band_problem interface.
     type, extends(band_problem) :: c_problem
@@ -156,5 +189,134 @@ contains
         call c_f_pointer(dst, p, [size(h)])
         p = h
     end subroutine copy_history
+
+    subroutine c_residual_eval(self, n, nj, c, F, ierr)
+        class(c_residual_problem), intent(inout) :: self
+        integer, intent(in) :: n, nj
+        real(c_double), intent(in) :: c(n,nj)
+        real(c_double), intent(out) :: F(n,nj)
+        integer, intent(out) :: ierr
+        procedure(c_residual_iface), pointer :: cres
+        call c_f_procpointer(self%cres, cres)
+        F = 0
+        ierr = cres(int(n, c_int), int(nj, c_int), c, F, self%ctx)
+    end subroutine c_residual_eval
+
+    function get_fd_options(p) result(o)
+        type(c_ptr), value :: p
+        type(fd_options) :: o
+        type(c_fd_options), pointer :: co
+        if (c_associated(p)) then
+            call c_f_pointer(p, co)
+            o = fd_options(co%rel_step, co%typical)
+        end if
+    end function get_fd_options
+
+    subroutine bandsolver_f_default_fd_options(opts) bind(c, name='bandsolver_f_default_fd_options')
+        type(c_fd_options), intent(out) :: opts
+        type(fd_options) :: d
+        opts = c_fd_options(d%rel_step, d%typical)
+    end subroutine bandsolver_f_default_fd_options
+
+    integer(c_int) function bandsolver_f_fd_jacobian(n, nj, residual, ctx, c, fd_opts, A, B, D, G, X, Y, &
+            evaluations) bind(c, name='bandsolver_f_fd_jacobian') result(status)
+        integer(c_int), value :: n, nj
+        type(c_funptr), value :: residual
+        type(c_ptr), value :: ctx, fd_opts, evaluations
+        real(c_double), intent(in) :: c(*)
+        real(c_double), intent(out) :: A(*), B(*), D(*), G(*), X(*), Y(*)
+        type(c_residual_problem) :: prob
+        real(c_double), allocatable :: Af(:,:,:), Bf(:,:,:), Df(:,:,:), Gf(:,:), Xf(:,:), Yf(:,:)
+        integer(c_long), pointer :: ev
+        integer :: fstatus, evals
+
+        status = BAND_INVALID_ARGUMENT
+        if (n < 1 .or. nj < 3 .or. .not. c_associated(residual)) return
+        prob%cres = residual
+        prob%ctx = ctx
+        allocate(Af(n,n,nj), Bf(n,n,nj), Df(n,n,nj), Gf(n,nj), Xf(n,n), Yf(n,n))
+        call band_fd_jacobian(prob, n, nj, reshape(c(1:n*nj), [n, nj]), Af, Bf, Df, Gf, Xf, Yf, fstatus, &
+                              get_fd_options(fd_opts), evals)
+        call to_fortran_blocks(n, nj, Af, A(1:n*n*nj))
+        call to_fortran_blocks(n, nj, Bf, B(1:n*n*nj))
+        call to_fortran_blocks(n, nj, Df, D(1:n*n*nj))
+        G(1:n*nj) = reshape(Gf, [n*nj])
+        X(1:n*n) = reshape(transpose(Xf), [n*n])
+        Y(1:n*n) = reshape(transpose(Yf), [n*n])
+        if (c_associated(evaluations)) then
+            call c_f_pointer(evaluations, ev)
+            ev = evals
+        end if
+        status = fstatus
+    end function bandsolver_f_fd_jacobian
+
+    integer(c_int) function bandsolver_f_newton_fd(n, nj, residual, ctx, c, opts, fd_opts, res, update_history, &
+            step_history, residual_history, evaluations) bind(c, name='bandsolver_f_newton_fd') result(status)
+        integer(c_int), value :: n, nj
+        type(c_funptr), value :: residual
+        type(c_ptr), value :: ctx, fd_opts, update_history, step_history, residual_history, evaluations
+        real(c_double), intent(inout), target :: c(*)
+        type(c_newton_options), intent(in) :: opts
+        type(c_newton_result), intent(out) :: res
+        type(c_residual_problem), target :: prob
+        type(newton_options) :: fo
+        type(newton_result) :: fr
+        real(c_double), pointer :: cf(:,:)
+        integer(c_long), pointer :: ev
+
+        res = c_newton_result(BAND_INVALID_ARGUMENT, 0, 0, 0, 0, 0, 0)
+        status = BAND_INVALID_ARGUMENT
+        if (n < 1 .or. nj < 3 .or. .not. c_associated(residual)) return
+        prob%cres = residual
+        prob%ctx = ctx
+        fo = newton_options(opts%rtol, opts%atol, opts%damping, opts%max_iter, opts%pivot, &
+                            opts%require_convergence /= 0)
+        cf(1:n,1:nj) => c(1:n*nj)
+        call band_newton_fd(prob, n, nj, cf, fo, fr, get_fd_options(fd_opts))
+
+        status = fr%status
+        res%status = fr%status
+        res%iterations = fr%iterations
+        res%converged = merge(1, 0, fr%converged)
+        res%fail_node = fr%fail_node
+        if (size(fr%update_norm) > 0) res%update_norm = fr%update_norm(size(fr%update_norm))
+        if (size(fr%step_norm) > 0) res%step_norm = fr%step_norm(size(fr%step_norm))
+        if (size(fr%residual_norm) > 0) res%residual_norm = fr%residual_norm(size(fr%residual_norm))
+        call copy_history(fr%update_norm, update_history)
+        call copy_history(fr%step_norm, step_history)
+        call copy_history(fr%residual_norm, residual_history)
+        if (c_associated(evaluations)) then
+            call c_f_pointer(evaluations, ev)
+            ev = fr%residual_evaluations
+        end if
+    end function bandsolver_f_newton_fd
+
+    integer(c_int) function bandsolver_f_check_jacobian(n, nj, fill, ctx, c, fd_opts, check) &
+            bind(c, name='bandsolver_f_check_jacobian') result(status)
+        integer(c_int), value :: n, nj
+        type(c_funptr), value :: fill
+        type(c_ptr), value :: ctx, fd_opts
+        real(c_double), intent(in) :: c(*)
+        type(c_jacobian_check), intent(out) :: check
+        type(c_problem), target :: prob
+        type(jacobian_check) :: fc
+        integer :: fstatus
+
+        check = c_jacobian_check(c_mismatch(0, 0, 0, 0, 0, 0), c_mismatch(0, 0, 0, 0, 0, 0), &
+            c_mismatch(0, 0, 0, 0, 0, 0), c_mismatch(0, 0, 0, 0, 0, 0), c_mismatch(0, 0, 0, 0, 0, 0))
+        status = BAND_INVALID_ARGUMENT
+        if (n < 1 .or. nj < 3 .or. .not. c_associated(fill)) return
+        prob%cfill = fill
+        prob%ctx = ctx
+        allocate(prob%At(n,n,nj), prob%Bt(n,n,nj), prob%Dt(n,n,nj), prob%Xt(n,n), prob%Yt(n,n))
+        call band_check_jacobian(prob, n, nj, reshape(c(1:n*nj), [n, nj]), fc, fstatus, get_fd_options(fd_opts))
+        check = c_jacobian_check(cm(fc%A), cm(fc%B), cm(fc%D), cm(fc%X), cm(fc%Y))
+        status = fstatus
+    contains
+        type(c_mismatch) function cm(m)
+            type(jacobian_mismatch), intent(in) :: m
+            cm = c_mismatch(m%error, m%node, m%row, m%col, m%user, m%fd)
+        end function cm
+    end function bandsolver_f_check_jacobian
 
 end module bandsolver_capi
