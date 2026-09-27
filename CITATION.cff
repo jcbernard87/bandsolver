@@ -10,6 +10,14 @@ authors:
 version: 0.1.1
 date-released: 2026-09-27
 license: BSD-3-Clause
+doi: 10.5281/zenodo.22997640
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.22997640
+    description: Concept DOI (all versions; resolves to the latest)
+  - type: doi
+    value: 10.5281/zenodo.22997641
+    description: Version 0.1.1
 repository-code: "https://github.com/jcbernard87/bandsolver"
 url: "https://github.com/jcbernard87/bandsolver"
 abstract: >-

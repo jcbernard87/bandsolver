@@ -25,8 +25,8 @@ Facts recorded from the oracle, which contain no code:
 1. **License — decided 2026-09-26: BSD-3-Clause** (`LICENSE`). It covers this repository's own code: the reimplementation, tests, examples and docs. The BAND algorithm itself is a published method and is cited, not licensed.
 2. **Shipping the legacy extract — decided 2026-09-26: not shipped.** See above. To publish it later would need permission from Wiley (permreq@wiley.com).
 3. **Institutional rights — resolved 2026-09-26 by the author.** Columbia is not involved in this library's development. The underlying algorithm is Newman's published method, and this implementation is the author's own work, so no institutional claim applies. The author approved public release.
-4. **Citation:** `CITATION.cff` and `.zenodo.json` were added on 2026-09-26. A Zenodo DOI requires the author to enable the repository on zenodo.org before the next release.
+4. **Citation:** `CITATION.cff` and `.zenodo.json` were added on 2026-09-26. Zenodo DOIs have been minted since v0.1.1 (concept DOI 10.5281/zenodo.22997640).
 5. **PyPI:** deferred by the author (2026-09-26).
 6. **Publication target**, for example JOSS or an electrochemistry-methods venue, and the scope of the accompanying paper. Stage 7 benchmarks and Track 2 model reproductions would support that paper.
 
-Published on GitHub as version 0.1.0 on 2026-09-26, with the author's approval. Version 0.1.1 (2026-09-27) is the first release archived on Zenodo; the author enabled the integration. It has not been uploaded to PyPI.
+Published on GitHub as version 0.1.0 on 2026-09-26, with the author's approval. Version 0.1.1 (2026-09-27) is the first release archived on Zenodo: concept DOI 10.5281/zenodo.22997640, version DOI 10.5281/zenodo.22997641. The author enabled the integration. It has not been uploaded to PyPI.
