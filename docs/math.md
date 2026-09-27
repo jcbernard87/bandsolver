@@ -43,6 +43,24 @@ Back substitution: `Δc_{nj−1} = e_{nj−1}`, then `Δc_j = E_jΔc_{j+1} + e_j
 
 Each node's block system is a dense `n×n` solve with `n+1` right-hand sides; node 0 has `2n+1`. The total cost is O(nj·n³) flops and O(nj·n²) storage for the `E_j`. This is block LU without pivoting across nodes. It is stable when the `B̂_j` are well conditioned, which is typical for diffusion-dominated discretizations. If a `B̂_j` is singular, the method stops at that node rather than pivoting across nodes. `min_rel_pivot` is reported so that ill conditioning can be seen.
 
+## Finite-difference Jacobians
+
+Appendix C suggests an "AUTOBAND" program that computes the coefficients `A, B, D` by numerical derivatives of the governing equations. The library does this in `fd_jacobian` and `newton_fd`.
+
+**Colouring.** `F_j` depends only on nodes `j−1, j, j+1`, plus the endpoint reach to `c₂` and `c_{nj−3}`. So every equation row involves at most three consecutive nodes. Perturbing unknown `k` at all nodes with `j ≡ r (mod 3)` at once therefore changes each row through at most one perturbed node. For one colour `r` and unknown `k`, the change in rows `m−1, m, m+1` gives column `k` of `D_{m−1}`, `B_m` and `A_{m+1}`. The endpoint rows give `X` (row 0, when m = 2) and `Y` (row nj−1, when m = nj−3). One full Jacobian costs **3n + 1** residual evaluations, independent of `nj`.
+
+**Step size.** Forward differences use `h = rel_step · max(|c|, typical) · sign(c)`, with `rel_step = √ε` by default. The divisor is the step actually representable, `(c + h) − c`. Appendix C notes the trade-off: too small a step amplifies round-off, and too large a step gives a poor derivative. The expected error is about √ε relative to the magnitude of each equation row. For badly scaled unknowns, set `typical` to their characteristic size.
+
+**Requirement.** The residual must respect the stencil. If `F_j` depends on `c_{j±2}`, the colouring silently mixes derivatives.
+
+**Checking a hand-written Jacobian.** `check_jacobian(fill, c)` differentiates the fill's own `G` (`F = −G`) and compares each entry with the user's:
+
+```
+score = |J_user − J_fd| / max(|J_user|, |J_fd|, 10⁻³ · rowscale)
+```
+
+Here `rowscale` is the largest Jacobian entry of that equation row. Forward-difference noise is about √ε·rowscale, so correct Jacobians score about 1e-9 to 1e-5. Mistakes in entries that matter at the 10⁻³ row level score well above 10⁻³.
+
 ## Block solve and pivoting
 
 - **`partial` (default).** Gauss–Jordan elimination with row partial pivoting on each block.

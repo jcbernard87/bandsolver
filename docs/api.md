@@ -77,6 +77,41 @@ bandsolver::NewtonResult r = bandsolver::newton(n, nj,
 
 `solve(SystemView, …)` and `newton` report errors through their return values. Only `std::bad_alloc` can propagate out of them.
 
+## Finite-difference Jacobians (all interfaces)
+
+These build `A, B, D, X, Y` and `G = −F` from a residual `F(c)` using 3n + 1 residual evaluations; see [math.md](math.md#finite-difference-jacobians). Options are `rel_step` (default √ε) and `typical` (default 1).
+
+**C++** (`<bandsolver/fd.hpp>`):
+```cpp
+using ResidualFunction = std::function<void(const double* c, double* F)>;   // [nj][n]
+long evals = bandsolver::fd_jacobian(n, nj, residual, c, sys /*BlockSystem&*/, fd_opts);
+bandsolver::NewtonResult r = bandsolver::newton_fd(n, nj, residual, c, newton_opts, fd_opts);
+//   r.residual_evaluations == (3n+1) * r.iterations
+bandsolver::JacobianCheck chk = bandsolver::check_jacobian(n, nj, fill, c, fd_opts);
+//   chk.A/B/D/X/Y: {error, node, row, col, user, fd} (0-based); chk.max_error()
+bandsolver::FillFunction f = bandsolver::fd_fill(n, nj, residual, fd_opts, &eval_counter);
+```
+
+**Fortran** (`use bandsolver_fd`):
+```fortran
+type, extends(band_residual_problem) :: my_residual
+contains
+    procedure :: residual   ! subroutine residual(self, n, nj, c, F, ierr)
+end type
+call band_fd_jacobian(prob, n, nj, c, A, B, D, G, X, Y, status [, opts=fd_options(...)] [, evaluations=k])
+call band_newton_fd(prob, n, nj, c, newton_opts, res [, fd_opts])   ! res%residual_evaluations
+call band_check_jacobian(fill_problem, n, nj, c, check, status [, opts])  ! 1-based locations; max_error(check)
+```
+
+**C:**
+```c
+bandsolver_f_default_fd_options(&fd);
+bandsolver_f_fd_jacobian(n, nj, residual_fn, ctx, c, &fd, A, B, D, G, X, Y, &evals);
+bandsolver_f_newton_fd(n, nj, residual_fn, ctx, c, &opts, &fd, &res, NULL, NULL, NULL, &evals);
+bandsolver_f_check_jacobian(n, nj, fill_fn, ctx, c, &fd, &check);           // 1-based locations
+```
+Here `residual_fn` has the signature `int (*)(int n, int nj, const double* c, double* F, void* ctx)`, and `fd` may be `NULL`.
+
 ## Python (`bandsolver`)
 
 ```python
@@ -86,6 +121,14 @@ bandsolver.newton(fill, c0, *, rtol=1e-10, atol=1e-12, damping=1.0, max_iter=50,
                   pivot="partial", require_convergence=True, backend="cpp") -> NewtonResult
 #   fill(c) -> (A, B, D, G) or (A, B, D, G, X, Y); c is a copy with shape (nj, n)
 #   NewtonResult: c, converged, iterations, status, update_norm, step_norm, residual_norm
+
+bandsolver.fd_jacobian(residual, c, *, rel_step=sqrt(eps), typical=1.0, backend="cpp")
+    -> (A, B, D, G, X, Y)
+bandsolver.newton_fd(residual, c0, *, <newton options>, rel_step, typical, backend) -> NewtonResult
+#   residual(c) -> F with shape (nj, n); NewtonResult.residual_evaluations
+bandsolver.check_jacobian(fill, c, *, rel_step, typical, backend) -> JacobianCheck
+#   .A/.B/.D/.X/.Y: JacobianMismatch(error, node, row, col, user, fd), 0-based
+#   .max_error, .worst() -> (block_name, JacobianMismatch)
 
 bandsolver.BACKENDS == ("cpp", "fortran")
 ```

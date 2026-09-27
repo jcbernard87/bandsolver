@@ -66,11 +66,18 @@ r = bs.newton(fill, np.zeros((nj, 1)), backend="fortran")   # or backend="cpp"
 print(r.converged, r.iterations, r.c[:, 0])
 ```
 
+If you only want to write the residual `F(c)`, let the library build the Jacobian by finite differences. This takes 3n + 1 residual calls per iteration, independent of the grid size:
+
+```python
+r = bs.newton_fd(lambda c: -fill(c)[3], np.zeros((nj, 1)))   # residual only
+print(bs.check_jacobian(fill, r.c).max_error)                # verify a hand-written Jacobian
+```
+
 **Fortran**: see [examples/fortran_quickstart.f90](examples/fortran_quickstart.f90). Extend `band_problem`, implement `fill`, and call `band_newton`; or call `band_solve` directly.
 
 **C++**: see [examples/cpp_quickstart.cpp](examples/cpp_quickstart.cpp). Fill a `BlockSystem` and call `bandsolver::solve`, or pass a lambda to `bandsolver::newton`.
 
-More complete examples are in [examples/](examples): a nonlinear BVP, a coupled 3-unknown differential-algebraic system, transient diffusion with implicit Euler, and second-order Neumann boundaries through `X`/`Y`. Each reports its observed convergence order.
+More complete examples are in [examples/](examples): a nonlinear BVP, a coupled 3-unknown differential-algebraic system, transient diffusion with implicit Euler, second-order Neumann boundaries through `X`/`Y`, and residual-only solving with Jacobian checking (`fd_jacobian.py`). Each reports its observed convergence order.
 
 ## Citing
 

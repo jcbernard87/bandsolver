@@ -86,7 +86,7 @@ Spec: [`docs/specs/2026-09-26-band-library-design.md`](docs/specs/2026-09-26-ban
 Spec: [`docs/specs/2026-09-27-fd-jacobian-design.md`](docs/specs/2026-09-27-fd-jacobian-design.md). Same rules as above. Work on the branch and merge via a PR once CI is green.
 - [x] F1 C++ core: `fd_jacobian`, `fd_fill`, `newton_fd`, `check_jacobian` + tests (analytic match incl. nj=3 X/Y, eval counts, planted-error detection, convergence).
 - [x] F2 Fortran core + C ABI: `band_residual_problem`, `band_fd_jacobian`, `band_newton_fd`, `band_check_jacobian`, `bandsolver_f_fd_jacobian`, `bandsolver_f_newton_fd` + tests; cross-check against C++.
-- [ ] F3 Python: `fd_jacobian`, `newton_fd`, `check_jacobian` on both backends + pytest; FD example; docs (api, math, README, validation).
+- [x] F3 Python: `fd_jacobian`, `newton_fd`, `check_jacobian` on both backends + pytest; FD example; docs (api, math, README, validation).
 - [ ] F4 Open a PR, wait for green CI and wheels on all platforms, merge; update the handoff.
 
 ### Checkpoints
@@ -106,3 +106,9 @@ Spec: [`docs/specs/2026-09-27-fd-jacobian-design.md`](docs/specs/2026-09-27-fd-j
   - ctest passes 12/12 in both Release and the Fortran `-fcheck=all` + FPE-trap build.
 
   Next: F3.
+- **2026-09-27 — F3.** Python gains `fd_jacobian`, `newton_fd` (whose `NewtonResult.residual_evaluations` counts residual calls) and `check_jacobian`, which returns a `JacobianCheck` of `JacobianMismatch` values with `.max_error` and `.worst()`. All work on both backends, and residual and fill exceptions propagate unchanged, including through the Fortran path via a new trampoline.
+  - Added `examples/fd_jacobian.py`: on the coupled n=3 DAE, `newton_fd` takes the same 5 iterations as analytic Newton, uses 50 residual calls independent of nj, matches within 3e-14, and has order 2.000. `check_jacobian` scores the correct fill 3.6e-9 and locates a planted sign bug at block B, row 1, column 0 with score 0.16. The score is modest because the entry is tiny next to the row's 2/h² scale, but it is well above the 1e-3 bug line.
+  - Docs updated: math.md (new finite-difference section), api.md (all four interfaces), README (residual-only snippet), validation.md §5. `test_readme` now runs every README Python block.
+  - Tests: pytest 103 passed; ctest 12/12.
+
+  Next: F4.

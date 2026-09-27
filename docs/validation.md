@@ -119,7 +119,17 @@ Across these differently optimized builds, the C++ and Fortran results differ by
 
 The Fortran backend is probably slower because its C interface transposes the blocks and copies them on entry. That was not measured separately. Time scales linearly in nj and roughly as n³.
 
-## 5. Continuous integration
+## 5. Finite-difference Jacobians (added 2026-09-27)
+
+| Check | Result |
+|---|---|
+| FD blocks vs analytic Jacobian: nonlinear test problem with full neighbour coupling and nonlinear X/Y terms; n ∈ {1,3}; nj ∈ {3,4,5,10} | ≤ 1.6e-8 relative (C++); < 1e-6 in the Fortran and Python tests; always exactly 3n+1 residual evaluations |
+| C++ vs Fortran on the same callbacks | Bit-identical Jacobian blocks, Newton iterates, evaluation counts and check reports |
+| `newton_fd` vs analytic `newton` (n=3, nj=40) | Same iteration count (9; 5 in the Fortran instance of the problem); solutions within 3e-15 |
+| `examples/fd_jacobian.py` (coupled 3-unknown DAE, nj = 21…321) | Same 5 iterations as analytic; 50 residual calls regardless of nj; solutions within 3e-14; spatial order 2.000 |
+| `check_jacobian` | Correct Jacobians score 3.6e-9 to 1.4e-5. A planted D error is located by block, node, row and column (score 1.6); a missing X entry scores about 1; a flipped-sign entry that is tiny against its row scale scores 0.16 |
+
+## 6. Continuous integration
 
 `.github/workflows/ci.yml` runs the CMake tests, and on Unix the Python tests, for every push and pull request:
 
@@ -133,7 +143,7 @@ The Fortran backend is probably slower because its C interface transposes the bl
 
 CI found one test defect that the macOS runs had missed: an out-of-bounds call in `test_kernel`, which glibc detects and macOS tolerated. It was fixed on 2026-09-26, and `band_solve` now validates its arguments before writing its output.
 
-## 6. Not covered
+## 7. Not covered
 
 - The bit-identical agreements in §1 were measured on the reference toolchain. On the other CI toolchains the tests pass within their tolerances, but bit-level agreement is not claimed there.
 - No performance benchmark or comparison against LAPACK band, KLU, SUNDIALS, etc. That is Stage 7 of the plan.
