@@ -152,3 +152,17 @@ Spec: [`docs/specs/2026-09-27-benchmarks-design.md`](docs/specs/2026-09-27-bench
   Next: B5.
 - **2026-09-27 — B5 (in progress).** Wrote `docs/benchmarks.md` (summary, methods, results tables, where the time goes, conclusions, fairness and limitations, reproduction commands) and `notebooks/05_benchmarks.ipynb` (reads the saved CSVs). Added README "Performance" and tutorial links, a CHANGELOG entry, and a CI benchmark smoke test (native harness via CTest; `linear.py --quick` and `transient.py --quick` on Linux and macOS). Corrected an overstatement before publishing: linearized BDF2 has the cheapest step *up to about 1000 nodes* and ties with IDA at 1281. Local tests: notebooks 5/5 and the README test pass. PR next.
 - **2026-09-27 — B5 done.** On PR #7's first CI run, the Linux aarch64 benchmark smoke step failed: scikit-sundae 1.1.3 has no wheel there, and the source build needs SUNDIALS. Fixed so that CI installs scikit-sundae only as a binary; the `--quick` run skips the IDA cases without it, and the full run requires it and exits with a clear message. Both paths were tested locally in an environment without scikit-sundae. The rerun passed on all 5 platforms. Merged. **Benchmark loop complete.**
+
+## Performance loop: fast Fortran kernel, Jacobian reuse, adaptive integrator
+Spec: [`docs/specs/2026-09-27-performance-options-design.md`](docs/specs/2026-09-27-performance-options-design.md). There are three PRs (A, B, C), each with CI and a benchmark update. Every option can be switched on and off, and each is benchmarked against the current standard.
+- [ ] P1 (PR A) Fortran fast kernel + `kernel` option (Fortran, C ABI, Python); bit-identity tests; Layer 1 benchmark reference vs fast; PR, CI, merge.
+- [ ] P2 (PR B) C++ factor/solve (`Factorization`) + tests.
+- [ ] P3 (PR B) Fortran factor/solve + C ABI + Python `bs.factor`; tests incl. cross-check.
+- [ ] P4 (PR B) Newton `jacobian_reuse` option + residual-only callback (C++, Fortran, Python); tests; Layer 2 reuse rows; PR, CI, merge.
+- [ ] P5 (PR C) C++ adaptive BDF1–2 DAE integrator with options; tests (orders, tolerance, DAE vs IDA, reuse, mask).
+- [ ] P6 (PR C) Python binding `bs.integrate` + tests + example.
+- [ ] P7 (PR C) Layer 2 benchmarks for all option combinations; docs/benchmarks.md before/after; notebook 5 update; PR, CI, merge.
+- [ ] P8 (follow-up) Fortran port of the integrator.
+
+### Checkpoints
+- **2026-09-27 — P0.** The author approved the design. Spec written; branch `fortran-fast-kernel`. Next: P1.
