@@ -38,3 +38,7 @@ add_executable(test_newton_cpp cpp/test_newton_cpp.cpp)
 target_link_libraries(test_newton_cpp PRIVATE bandsolver_cpp bandsolver_f)
 set_target_properties(test_newton_cpp PROPERTIES LINKER_LANGUAGE CXX)
 add_test(NAME test_newton_cpp COMMAND test_newton_cpp)
+
+add_executable(test_fd_cpp cpp/test_fd.cpp)
+target_link_libraries(test_fd_cpp PRIVATE bandsolver_cpp)
+add_test(NAME test_fd_cpp COMMAND test_fd_cpp)

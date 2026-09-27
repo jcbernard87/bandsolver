@@ -18,7 +18,7 @@ Users should only have to supply the residual `F(c)` for the whole grid (shape `
   - `Y[:,k]` from row nj−1 when m = nj−3.
   - With nj = 3, node 2's perturbation feeds both `D_1` and `X` from rows 1 and 0, and node 0's feeds both `A_1` and `Y`, from rows 1 and 2.
 - **Implementation.** The finite-difference code is an adapter that turns a residual into a `fill` function, so `newton_fd` reuses the existing Newton driver unchanged. It is implemented natively in both cores.
-- **Jacobian check.** `check_jacobian(fill, c)` takes `F = −G` from the user's own fill, differentiates it by finite differences, and reports the largest scaled mismatch `|J_user − J_fd| / (|J_fd| + scale)` per block type, with its node, row and column.
+- **Jacobian check.** `check_jacobian(fill, c)` takes `F = −G` from the user's own fill, differentiates it by finite differences, and reports the largest scaled mismatch `|J_user − J_fd| / max(|J_user|, |J_fd|, 1e-3·rowscale)` per block type, with its node, row and column. `rowscale` is the largest entry of that equation row. This was adjusted during F1: a pure per-entry relative error flagged forward-difference noise on tiny entries.
 
 ## API
 - **C++:**

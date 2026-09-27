@@ -84,10 +84,18 @@ Spec: [`docs/specs/2026-09-26-band-library-design.md`](docs/specs/2026-09-26-ban
 
 ## Feature loop: finite-difference Jacobians (branch `fd-jacobian`)
 Spec: [`docs/specs/2026-09-27-fd-jacobian-design.md`](docs/specs/2026-09-27-fd-jacobian-design.md). Same rules as above. Work on the branch and merge via a PR once CI is green.
-- [ ] F1 C++ core: `fd_jacobian`, `fd_fill`, `newton_fd`, `check_jacobian` + tests (analytic match incl. nj=3 X/Y, eval counts, planted-error detection, convergence).
+- [x] F1 C++ core: `fd_jacobian`, `fd_fill`, `newton_fd`, `check_jacobian` + tests (analytic match incl. nj=3 X/Y, eval counts, planted-error detection, convergence).
 - [ ] F2 Fortran core + C ABI: `band_residual_problem`, `band_fd_jacobian`, `band_newton_fd`, `band_check_jacobian`, `bandsolver_f_fd_jacobian`, `bandsolver_f_newton_fd` + tests; cross-check against C++.
 - [ ] F3 Python: `fd_jacobian`, `newton_fd`, `check_jacobian` on both backends + pytest; FD example; docs (api, math, README, validation).
 - [ ] F4 Open a PR, wait for green CI and wheels on all platforms, merge; update the handoff.
 
 ### Checkpoints
 - **2026-09-27 — F0.** The author approved the design; spec written; branch `fd-jacobian` created. Next: F1.
+- **2026-09-27 — F1.** Added `cpp/include/bandsolver/fd.hpp` and `cpp/src/fd.cpp`, containing `fd_jacobian` (period-3 colouring, 3n+1 evaluations), `fd_fill`, `newton_fd` and `check_jacobian`. `NewtonResult` gains `residual_evaluations`. Test results:
+  - On a nonlinear n ∈ {1,3} problem with nonlinear X/Y terms, the finite-difference blocks match the analytic ones to ≤ 1.6e-8 relative for nj ∈ {3,4,5,10}, always with exactly 3n+1 evaluations.
+  - `newton_fd` takes the same 9 iterations as analytic Newton and reaches the same solution within 3e-15. Its evaluation count is exactly (3n+1)·iterations.
+  - **Design adjustment:** `check_jacobian` now measures each entry against its equation row's scale, so the floor is 1e-3·rowscale. The first test run showed that per-entry relative error flags ordinary finite-difference noise on tiny entries (3.6e-4 on a correct Jacobian). After the change, a correct fill scores 1.4e-5, a planted D error 1.6 (located at the right node, row and column), and a missing X entry about 1.
+  - Exceptions propagate, and invalid options are rejected.
+  - ctest passes 10/10, and the new tests are clean under ASan/UBSan.
+
+  Next: F2.
