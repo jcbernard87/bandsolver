@@ -141,4 +141,4 @@ python benchmarks/transient.py                                             # ~30
 python benchmarks/plot.py linear transient
 ```
 
-Each script accepts `--quick` for a smoke test at tiny sizes; CI runs that on Linux. The summary notebook [05 · Benchmarks](../notebooks/05_benchmarks.ipynb) reads the saved CSVs and does not re-run anything.
+Each script accepts `--quick` for a smoke test at tiny sizes, which CI runs on Linux and macOS. scikit-sundae 1.1.3 publishes wheels only for Linux x86_64, macOS and Windows. On other platforms (such as Linux aarch64) it needs a local SUNDIALS build; there, the quick smoke run skips the IDA cases and the full run stops with a clear message. The summary notebook [05 · Benchmarks](../notebooks/05_benchmarks.ipynb) reads the saved CSVs and does not re-run anything.

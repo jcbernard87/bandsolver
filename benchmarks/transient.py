@@ -164,6 +164,14 @@ class Model:
                     jevals=sol.njev, newton_iters=None)
 
 
+def have_ida():
+    try:
+        import sksundae.ida  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
 def timed(f, repeats=3):
     best, out = np.inf, None
     for _ in range(repeats):
@@ -179,14 +187,19 @@ RESULTS = __import__("pathlib").Path(__file__).resolve().parent / "results"
 
 def work_precision(nj=81, quick=False):
     m = Model(nj)
-    ref = m.run_ida(1e-12)["y"]
+    ida = have_ida()
+    if not ida and not quick:
+        raise SystemExit("scikit-sundae is required for the full benchmark (pip install -r benchmarks/requirements.txt)")
+    ref = (m.run_ida(1e-12) if ida else m.run_scipy(1e-12))["y"]
+    if not ida:
+        print("scikit-sundae not installed (no wheel for this platform?): skipping the IDA cases in this smoke run")
     dts = [0.1, 0.02] if quick else [0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001]
     rtols = [1e-3, 1e-5] if quick else [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10]
     runs = [("bandsolver BE", dt, lambda dt=dt: m.run_bandsolver(dt, "BE")) for dt in dts]
     runs += [("bandsolver BDF2", dt, lambda dt=dt: m.run_bandsolver(dt, "BDF2")) for dt in dts]
     runs += [("bandsolver BDF2, 1 Newton iter/step", dt, lambda dt=dt: m.run_bandsolver(dt, "BDF2", linearized=True))
              for dt in dts]
-    runs += [("SUNDIALS IDA", r, lambda r=r: m.run_ida(r)) for r in rtols]
+    runs += [("SUNDIALS IDA", r, lambda r=r: m.run_ida(r)) for r in rtols] if ida else []
     runs += [("SciPy BDF", r, lambda r=r: m.run_scipy(r)) for r in rtols]
     rows = []
     for method, setting, run in runs:
@@ -207,6 +220,8 @@ def mesh_scaling(quick=False):
                             ("bandsolver BDF2, 1 iter (dt=5e-3)", lambda: m.run_bandsolver(5e-3, "BDF2", linearized=True)),
                             ("SUNDIALS IDA (rtol=1e-6)", lambda: m.run_ida(1e-6)),
                             ("SciPy BDF (rtol=1e-6)", lambda: m.run_scipy(1e-6))]:
+            if method.startswith("SUNDIALS") and not have_ida():
+                continue
             r = timed(run, repeats=1 if quick else 3)
             rows.append(dict(method=method, nj=nj, wall_s=r["wall_s"], steps=r["steps"],
                              per_step_s=r["wall_s"] / r["steps"], fevals=r["fevals"], jevals=r["jevals"]))
@@ -246,6 +261,8 @@ if __name__ == "__main__":
     ap.add_argument("--quick", action="store_true")
     a = ap.parse_args()
     if not a.quick:
+        if not have_ida():
+            raise SystemExit("scikit-sundae is required for the full benchmark (pip install -r benchmarks/requirements.txt)")
         consistency()
     write_csv(work_precision(quick=a.quick), "transient_wp_quick.csv" if a.quick else "transient_wp.csv")
     write_csv(mesh_scaling(quick=a.quick), "transient_mesh_quick.csv" if a.quick else "transient_mesh.csv")
