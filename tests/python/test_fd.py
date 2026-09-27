@@ -63,14 +63,20 @@ def test_newton_fd_matches_analytic_and_counts(backend):
     assert rf.residual_evaluations == (3 * 3 + 1) * rf.iterations
 
 
-def test_backends_identical():
+def test_backends_agree():
+    """Bit-identical on the reference toolchains (gfortran + clang/gcc). Across compilers
+    (e.g. ifx + MSVC on Windows) the solutions differ by a few ulp, and forward differences
+    amplify an ulp in F to ~eps/h ~ 1e-8 relative in the blocks, hence the tolerances."""
     p = Problem(3, 20, 7)
     a = bs.newton_fd(p.residual, start(3, 20), backend="cpp")
     b = bs.newton_fd(p.residual, start(3, 20), backend="fortran")
-    np.testing.assert_array_equal(a.c, b.c)
-    for x, y in zip(bs.fd_jacobian(p.residual, start(3, 20), backend="cpp"),
-                    bs.fd_jacobian(p.residual, start(3, 20), backend="fortran")):
-        np.testing.assert_array_equal(x, y)
+    assert a.iterations == b.iterations and a.residual_evaluations == b.residual_evaluations
+    np.testing.assert_allclose(a.c, b.c, rtol=0, atol=1e-13 * np.abs(a.c).max())
+    fa = bs.fd_jacobian(p.residual, start(3, 20), backend="cpp")
+    fb = bs.fd_jacobian(p.residual, start(3, 20), backend="fortran")
+    scale = max(np.abs(x).max() for x in fa[:3])
+    for x, y in zip(fa, fb):
+        np.testing.assert_allclose(x, y, rtol=0, atol=1e-6 * scale)
 
 
 def test_check_jacobian_clean_and_planted(backend):

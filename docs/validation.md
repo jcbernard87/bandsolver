@@ -124,7 +124,7 @@ The Fortran backend is probably slower because its C interface transposes the bl
 | Check | Result |
 |---|---|
 | FD blocks vs analytic Jacobian: nonlinear test problem with full neighbour coupling and nonlinear X/Y terms; n ∈ {1,3}; nj ∈ {3,4,5,10} | ≤ 1.6e-8 relative (C++); < 1e-6 in the Fortran and Python tests; always exactly 3n+1 residual evaluations |
-| C++ vs Fortran on the same callbacks | Bit-identical Jacobian blocks, Newton iterates, evaluation counts and check reports |
+| C++ vs Fortran on the same callbacks | Bit-identical Jacobian blocks, Newton iterates, evaluation counts and check reports on the reference toolchain (gfortran + clang). With Windows ifx + MSVC, the solutions differ by ≤ 4.4e-16 (1–2 ulp), so the Python test uses tolerances. |
 | `newton_fd` vs analytic `newton` (n=3, nj=40) | Same iteration count (9; 5 in the Fortran instance of the problem); solutions within 3e-15 |
 | `examples/fd_jacobian.py` (coupled 3-unknown DAE, nj = 21…321) | Same 5 iterations as analytic; 50 residual calls regardless of nj; solutions within 3e-14; spatial order 2.000 |
 | `check_jacobian` | Correct Jacobians score 3.6e-9 to 1.4e-5. A planted D error is located by block, node, row and column (score 1.6); a missing X entry scores about 1; a flipped-sign entry that is tiny against its row scale scores 0.16 |

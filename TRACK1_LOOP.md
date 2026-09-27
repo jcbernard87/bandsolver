@@ -112,3 +112,4 @@ Spec: [`docs/specs/2026-09-27-fd-jacobian-design.md`](docs/specs/2026-09-27-fd-j
   - Tests: pytest 103 passed; ctest 12/12.
 
   Next: F4.
+- **2026-09-27 — F4 (in progress).** PR #2 opened. Every check passed except the Windows wheel job. There, `test_backends_identical` demanded bit-for-bit equality between the C++ core (MSVC) and the Fortran core (ifx); the solutions differed by ≤ 4.4e-16 (1–2 ulp) in 21 of 60 values. This is a test flaw, not a solver defect. The test is now `test_backends_agree`, with tolerances of 1e-13 on solutions and 1e-6 on the FD blocks (forward differences amplify an ulp in F to ~1e-8). validation.md now scopes the bit-identical claim to the reference toolchain. Pushed for re-run.
