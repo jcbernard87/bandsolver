@@ -69,7 +69,10 @@ TRANSIENT_SERIES = [  # fixed order
     ("bandsolver BDF2, 1 Newton iter/step", "bandsolver BDF2, 1 Newton iteration/step", BLUE, "-"),
     ("bandsolver BDF2", "bandsolver BDF2, full Newton", BLUE, "--"),
     ("bandsolver BDF2, Jacobian reuse", "bandsolver BDF2, Jacobian reuse (within step)", BLUE, ":"),
-    ("bandsolver BE", "bandsolver backward Euler, full Newton", ORANGE, "-"),
+    ("integrate fixed BDF2, reuse", "bs.integrate fixed-step BDF2, Jacobian reuse", MAGENTA, "-"),
+    ("integrate fixed BDF2, no reuse", "bs.integrate fixed-step BDF2, no reuse", MAGENTA, "--"),
+    ("integrate adaptive BDF1-2, reuse", "bs.integrate adaptive BDF1-2, Jacobian reuse", ORANGE, "-"),
+    ("integrate adaptive BDF1-2, no reuse", "bs.integrate adaptive BDF1-2, no reuse", ORANGE, "--"),
     ("SUNDIALS IDA", "SUNDIALS IDA (adaptive BDF 1-5, DAE)", AQUA, "-"),
     ("SciPy BDF", "SciPy solve_ivp BDF (reduced ODE)", YELLOW, "-"),
 ]
@@ -77,19 +80,20 @@ TRANSIENT_SERIES = [  # fixed order
 
 def plot_transient():
     rows = read("transient_wp.csv")
-    fig, ax = plt.subplots(figsize=(6.6, 4.4))
+    fig, ax = plt.subplots(figsize=(9.6, 4.4))
     for method, label, color, ls in TRANSIENT_SERIES:
         pts = sorted((float(r["wall_s"]), float(r["error"])) for r in rows if r["method"] == method)
         ax.loglog(*zip(*pts), ls, marker="o", color=color, label=label)
     ax.set_xlabel("wall time for the whole transient (s)")
     ax.set_ylabel("max |c − c_ref| at t = 5 s  (mol/m³)")
     ax.set_title("Layer 2: work-precision (binary electrolyte, nj = 81)")
-    ax.legend(fontsize=8, loc="lower left")
+    ax.legend(fontsize=8, loc="center left", bbox_to_anchor=(1.01, 0.5))
     fig.tight_layout(); fig.savefig(RESULTS / "transient_work_precision.png", bbox_inches="tight"); plt.close(fig)
 
     mesh = read("transient_mesh.csv")
     series = [("bandsolver BDF2, 1 iter (dt=5e-3)", BLUE, "-"), ("bandsolver BDF2 (dt=5e-3)", BLUE, "--"),
               ("bandsolver BDF2, reuse (dt=5e-3)", BLUE, ":"),
+              ("integrate fixed BDF2, reuse (dt=5e-3)", MAGENTA, "-"), ("integrate adaptive, reuse (rtol=1e-6)", ORANGE, "-"),
               ("SUNDIALS IDA (rtol=1e-6)", AQUA, "-"), ("SciPy BDF (rtol=1e-6)", YELLOW, "-")]
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10.5, 3.8))
     for method, color, ls in series:

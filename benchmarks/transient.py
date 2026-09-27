@@ -125,6 +125,31 @@ class Model:
             newton_iters += r.iterations
         return dict(y=u, steps=steps, fevals=newton_iters, jevals=newton_iters, newton_iters=newton_iters)
 
+    # ---- bandsolver.integrate (adaptive / fixed BDF 1-2 with switchable Jacobian reuse) ----------
+    def dae_residual(self, t, u, udot):
+        R = self.operator(u[:, 0], u[:, 1])
+        acc = self.V * udot[:, 0]
+        R[:, 0] += acc
+        R[:-1, 1] += acc[:-1]
+        return R
+
+    def dae_jacobian(self, t, u, udot, alpha):
+        _, A, B, D = self.operator(u[:, 0], u[:, 1], with_jacobian=True)
+        B[:, 0, 0] += alpha * self.V
+        B[:-1, 1, 0] += alpha * self.V[:-1]
+        return A, B, D
+
+    def run_integrate(self, **opts):
+        mask = np.zeros((self.nj, 2), dtype=bool)
+        mask[:, 1] = True
+        if opts.get("adaptive", True) and "atol" not in opts:
+            opts["atol"] = opts["rtol"] * C0
+        r = bs.integrate(self.dae_residual, self.initial(), [T_END], jacobian=self.dae_jacobian,
+                         algebraic=mask, **opts)
+        s = r.stats
+        return dict(y=r.y[-1], steps=s["steps"], fevals=s["residual_evaluations"], jevals=s["factorizations"],
+                    newton_iters=s["newton_iterations"])
+
     # ---- SUNDIALS IDA on the DAE -----------------------------------------------------------
     def run_ida(self, rtol, max_steps=1_000_000):
         from sksundae.ida import IDA
@@ -218,6 +243,13 @@ def work_precision(nj=81, quick=False):
              for dt in dts]
     runs += [("bandsolver BDF2, Jacobian reuse", dt, lambda dt=dt: m.run_bandsolver(dt, "BDF2", reuse=True))
              for dt in dts]
+    for label, extra in [("integrate fixed BDF2, reuse", dict(jacobian_reuse=True)),
+                         ("integrate fixed BDF2, no reuse", dict(jacobian_reuse=False))]:
+        runs += [(label, dt, lambda dt=dt, extra=extra: m.run_integrate(adaptive=False, dt=dt, **extra)) for dt in dts]
+    for label, extra in [("integrate adaptive BDF1-2, reuse", dict(jacobian_reuse=True)),
+                         ("integrate adaptive BDF1-2, no reuse", dict(jacobian_reuse=False)),
+                         ("integrate adaptive BE, reuse", dict(jacobian_reuse=True, max_order=1))]:
+        runs += [(label, r, lambda r=r, extra=extra: m.run_integrate(rtol=r, **extra)) for r in rtols]
     runs += [("SUNDIALS IDA", r, lambda r=r: m.run_ida(r)) for r in rtols] if ida else []
     runs += [("SciPy BDF", r, lambda r=r: m.run_scipy(r)) for r in rtols]
     rows = []
@@ -238,6 +270,9 @@ def mesh_scaling(quick=False):
         for method, run in [("bandsolver BDF2 (dt=5e-3)", lambda: m.run_bandsolver(5e-3, "BDF2")),
                             ("bandsolver BDF2, 1 iter (dt=5e-3)", lambda: m.run_bandsolver(5e-3, "BDF2", linearized=True)),
                             ("bandsolver BDF2, reuse (dt=5e-3)", lambda: m.run_bandsolver(5e-3, "BDF2", reuse=True)),
+                            ("integrate adaptive, reuse (rtol=1e-6)", lambda: m.run_integrate(rtol=1e-6)),
+                            ("integrate fixed BDF2, reuse (dt=5e-3)",
+                             lambda: m.run_integrate(adaptive=False, dt=5e-3)),
                             ("SUNDIALS IDA (rtol=1e-6)", lambda: m.run_ida(1e-6)),
                             ("SciPy BDF (rtol=1e-6)", lambda: m.run_scipy(1e-6))]:
             if method.startswith("SUNDIALS") and not have_ida():

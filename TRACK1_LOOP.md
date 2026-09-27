@@ -161,7 +161,7 @@ Spec: [`docs/specs/2026-09-27-performance-options-design.md`](docs/specs/2026-09
 - [x] P4 (PR B) Newton `jacobian_reuse` option + residual-only callback (C++, Fortran, Python); tests; Layer 2 reuse rows; PR, CI, merge.
 - [x] P5 (PR C) C++ adaptive BDF1–2 DAE integrator with options; tests (orders, tolerance, DAE vs IDA, reuse, mask).
 - [x] P6 (PR C) Python binding `bs.integrate` + tests + example.
-- [ ] P7 (PR C) Layer 2 benchmarks for all option combinations; docs/benchmarks.md before/after; notebook 5 update; PR, CI, merge.
+- [x] P7 (PR C) Layer 2 benchmarks for all option combinations; docs/benchmarks.md before/after; notebook 5 update; PR, CI, merge.
 - [ ] P8 (follow-up) Fortran port of the integrator.
 
 ### Checkpoints
@@ -197,3 +197,12 @@ Spec: [`docs/specs/2026-09-27-performance-options-design.md`](docs/specs/2026-09
     - fixed BDF2, dt = 0.01: error 2.1e-5; **74 ms without reuse (724 factorizations) vs 32 ms with reuse (2 factorizations)**;
     - adaptive, rtol = 1e-6: error 8e-4; 164 steps; **33 ms without reuse (337 factorizations) vs 16 ms with reuse (34)**.
   - **Tests:** 6 new (orders 2.0/4.0, outputs, FD vs analytic Jacobian, DAE with reuse on/off, errors); pytest 153. api.md and the CHANGELOG are updated. Next: P7 (benchmarks + docs + PR C).
+- **2026-09-27 — P7.** Layer 2 benchmarks for the `bs.integrate` option combinations (fixed/adaptive × reuse on/off, adaptive BE), nj = 81 and the mesh sweep.
+  - **Fixed BDF2 with reuse vs the standard user full-Newton loop, identical errors:** 29.8 vs 89.6 ms at Δt = 0.01; 227 vs 807 ms at Δt = 0.001 (1.7× at Δt = 0.1, up to 3.6×). 2–4 Jacobians per run. Cheapest step of all stacks: 45/70/152 µs at nj = 41/321/1281, vs IDA 87/138/236.
+  - **Reuse off costs** 1.8–2.4× (fixed) and 1.6–2.5× (adaptive).
+  - **Adaptive BDF1–2** is IDA-level per step. At a matched step count it is worse at t = 5 s (6.9e-5 in 559 steps vs fixed Δt = 0.01: 7.4e-6 in 500). The cause is not a defect: about 200 steps go to the start-up transient. At t = 0.02/0.1/0.5 s adaptive is 1.0e-4/1.1e-4/1.1e-4 vs fixed 9.0e-2/5.0e-3/8.9e-4. Documented honestly; order > 2 is the follow-up.
+  - **Fixes found while benchmarking:**
+    - fixed mode retries Newton with a fresh Jacobian and 5× the iterations (inconsistent algebraic start at Δt = 0.1);
+    - output landing uses a relative slack (Δt = 5e-3 took 1001 steps, now 1000).
+    - Regression tests were added for both; pytest 157, ctest 17/17.
+  - **Also refreshed:** stale layer 1 figures after the P1 rerun (LAPACK 1.6–3.9×, SuperLU 2.3–8.8×) in the README, the docs and notebook 5.

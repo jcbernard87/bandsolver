@@ -55,6 +55,13 @@ def test_binary_electrolyte_dae_reuse_on_off():
     assert e_fix < 1e-4 and r_fix.stats["factorizations"] <= 5    # constant alpha: one Jacobian serves all steps
 
 
+def test_fixed_step_large_step_inconsistent_algebraic_start():
+    # Regression: fixed step 0.1 s from phi = 0 (inconsistent) needs more than max_newton_iter
+    # Newton iterations on the first step; fixed mode must retry with more iterations.
+    r, _, e = ai.run(adaptive=False, dt=0.1)
+    assert r.stats["steps"] == 50 and e < 5e-2
+
+
 class Boom(Exception):
     pass
 
@@ -74,3 +81,10 @@ def test_errors():
     with pytest.raises(bs.IntegrationError) as e:
         bs.integrate(res, np.ones((3, 1)), [1.0], max_steps=3)
     assert e.value.result.stats["steps"] == 3
+
+
+@pytest.mark.parametrize("dt,t_end,steps", [(5e-3, 5.0, 1000), (0.1, 3.0, 30), (1e-3, 0.7, 700)])
+def test_fixed_step_count_has_no_roundoff_sliver(dt, t_end, steps):
+    # Regression: accumulated round-off in t used to leave a tiny extra step before t_end.
+    r = bs.integrate(res, np.ones((3, 1)), [t_end], jacobian=jac, adaptive=False, dt=dt)
+    assert r.stats["steps"] == steps and r.t[-1] == t_end

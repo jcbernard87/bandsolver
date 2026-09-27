@@ -102,9 +102,9 @@ To run them locally: `pip install bandsolver[notebooks]` (or `pip install jupyte
 
 ## Performance
 
-Solving a single linear block system, BAND is **1.6–5.8× faster than LAPACK's banded solver** (median 2.4×) and **2.4–12× faster than SciPy's SuperLU**, with up to 9× less memory. The sweep covered n = 1–30 unknowns per node and nj = 25–2000 nodes.
+Solving a single linear block system, BAND is **1.6–3.9× faster than LAPACK's banded solver** (median 2.4×) and **2.3–8.8× faster than SciPy's SuperLU**, with up to 9× less memory. The sweep covered n = 1–30 unknowns per node and nj = 25–2000 nodes.
 
-For whole transient simulations, BAND with fixed-step BDF2 and one linearized Newton correction per step is the fastest option down to errors of about 1e-6 relative. Below that, adaptive high-order integrators (SUNDIALS IDA, SciPy BDF) win. The method, full results and caveats are in [docs/benchmarks.md](docs/benchmarks.md) (single machine: Apple M1 Pro).
+For whole transient simulations, fixed-step BDF2 on BAND is the fastest option down to errors of about 1e-6 relative. The built-in integrator `bs.integrate`, which reuses one factorization across time steps, has the cheapest time step of all the stacks tested. Below that error level, adaptive high-order integrators (SUNDIALS IDA, SciPy BDF) win. The method, full results and caveats are in [docs/benchmarks.md](docs/benchmarks.md) (single machine: Apple M1 Pro).
 
 ## Documentation
 

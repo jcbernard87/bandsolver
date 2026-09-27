@@ -90,11 +90,12 @@ IntegrationResult integrate(int n, int nj, const DaeResidual& residual, const Da
                 res.message = "max_steps reached";
                 break;
             }
-            // Land exactly on the next output time.
+            // Land exactly on the next output time (a relative slack absorbs round-off in the
+            // accumulated time, so fixed steps that divide the interval never leave a sliver).
             const double target = t_out[next_out];
             bool hits_output = false;
             double hstep = h;
-            if (cur.t + hstep >= target - eps_t) {
+            if (cur.t + hstep * (1 + 1e-9) >= target - eps_t) {
                 hstep = target - cur.t;
                 hits_output = true;
             }
@@ -131,14 +132,19 @@ IntegrationResult integrate(int n, int nj, const DaeResidual& residual, const Da
             bool converged = false, fresh = false;
             if (!o.jacobian_reuse || !have_fac || std::abs(alpha / alpha_fac - 1) > o.reuse_alpha_change)
                 have_fac = false;
-            for (int attempt = 0; attempt < 2 && !converged; ++attempt) {
-                if (attempt == 1) {
-                    if (fresh) break;           // a fresh Jacobian already failed: shrink the step
-                    have_fac = false;           // retry once with a fresh Jacobian
+            // Attempt 0: current (possibly reused) factorization. Attempt 1: fresh Jacobian.
+            // Fixed-step mode cannot shrink the step, so it gets a final attempt with a fresh
+            // Jacobian and 5x the Newton iterations (e.g. an inconsistent algebraic start).
+            const int attempts = o.adaptive ? 2 : 3;
+            for (int attempt = 0; attempt < attempts && !converged; ++attempt) {
+                if (attempt >= 1) {
+                    if (attempt == 1 && fresh && o.adaptive) break;   // fresh Jacobian failed: shrink step
+                    have_fac = false;
                     c = pred;
                 }
+                const int iter_cap = attempt == 2 ? 5 * o.max_newton_iter : o.max_newton_iter;
                 double del_prev = 0;
-                for (int k = 0; k < o.max_newton_iter; ++k) {
+                for (int k = 0; k < iter_cap; ++k) {
                     for (std::size_t i = 0; i < N; ++i) cdot[i] = alpha * c[i] + beta[i];
                     if (!have_fac || !o.jacobian_reuse) {
                         J.set_zero();
@@ -186,7 +192,7 @@ IntegrationResult integrate(int n, int nj, const DaeResidual& residual, const Da
                     del_prev = del;
                     if (!std::isfinite(del)) break;
                 }
-                if (!o.jacobian_reuse) break;
+                if (!o.jacobian_reuse && o.adaptive) break;
             }
             if (!converged) {
                 ++res.stats.rejected_newton;
