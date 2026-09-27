@@ -158,7 +158,7 @@ Spec: [`docs/specs/2026-09-27-performance-options-design.md`](docs/specs/2026-09
 - [x] P1 (PR A) Fortran fast kernel + `kernel` option (Fortran, C ABI, Python); bit-identity tests; Layer 1 benchmark reference vs fast; PR, CI, merge.
 - [x] P2 (PR B) C++ factor/solve (`Factorization`) + tests.
 - [x] P3 (PR B) Fortran factor/solve + C ABI + Python `bs.factor`; tests incl. cross-check.
-- [ ] P4 (PR B) Newton `jacobian_reuse` option + residual-only callback (C++, Fortran, Python); tests; Layer 2 reuse rows; PR, CI, merge.
+- [x] P4 (PR B) Newton `jacobian_reuse` option + residual-only callback (C++, Fortran, Python); tests; Layer 2 reuse rows; PR, CI, merge.
 - [ ] P5 (PR C) C++ adaptive BDF1–2 DAE integrator with options; tests (orders, tolerance, DAE vs IDA, reuse, mask).
 - [ ] P6 (PR C) Python binding `bs.integrate` + tests + example.
 - [ ] P7 (PR C) Layer 2 benchmarks for all option combinations; docs/benchmarks.md before/after; notebook 5 update; PR, CI, merge.
@@ -179,3 +179,6 @@ Spec: [`docs/specs/2026-09-27-performance-options-design.md`](docs/specs/2026-09
   - **Tests:** Fortran factor+solve vs band_solve ≤ 5.97e-16 relative (sweep incl. nj=3, X/Y); repeated RHS work; singular node reported at factor time (1-based 6); invalid inputs rejected. Python: 23 tests on both backends (vs `solve`, cross-backend, singular 0-based node, shape and NaN errors).
   - Totals: ctest 15/15, pytest 137.
   - A gfortran `-Wdo-subscript` warning (index j−2 inside the j==nj branch) was removed by indexing with nj−2 explicitly.
+- **2026-09-27 — P4.** The `jacobian_reuse` option is now in the C++ and Fortran Newton drivers (refresh when a factorization has been used reuse_max_iter times or step_k > contraction·step_{k−1}), with an optional residual-only callback: C++ `ResidualFunction`; Fortran overridable `band_problem%residual` with a default fallback; C `bandsolver_f_newton_ex`; Python `residual=`. `newton_fd` reuse iterations cost 1 residual evaluation. Results report jacobian_evaluations and factorizations.
+  - **Tests:** C++ full Newton 9 it / 9 factorizations vs reuse 12 it / 4 factorizations, same root (7e-15); with the residual callback, fills == factorizations. The Fortran FD + reuse run took 8 it, 2 factorizations and 26 evaluations; the C++ and Fortran reuse drivers are identical through the C ABI (12/4/8, diff 0). Python has 10 new tests; pytest 147, ctest 16.
+  - **Benchmark (honest):** within each BDF2 step, reuse saves only 12–18% (per step 140–546 µs vs 160–662 µs full Newton; the 1-iteration variant costs 64–242 µs). Each step needs about 3 Newton iterations to a very tight tolerance, and the Python residual dominates. Bigger gains need cross-step reuse and a matched Newton tolerance, which come with the integrator (PR C). docs/benchmarks, api.md and the CHANGELOG are updated. Next: PR B CI and merge, then P5.

@@ -39,6 +39,9 @@ typedef struct {
     int pivot;                 /* enum bandsolver_pivot */
     int require_convergence;   /* default 1; 0 with max_iter=1 = archival one-step use */
     int kernel;                /* enum bandsolver_kernel, default FAST (added in 0.1.2) */
+    int jacobian_reuse;        /* modified Newton: 0 (default) or 1 (added in 0.1.2) */
+    int reuse_max_iter;        /* max uses of one factorization, default 5 */
+    double reuse_contraction;  /* refresh when step_k > this * step_{k-1}, default 0.5 */
 } bandsolver_newton_options;
 
 typedef struct {
@@ -49,6 +52,9 @@ typedef struct {
     double update_norm;        /* last scaled update norm */
     double step_norm;          /* last max |dc| */
     double residual_norm;      /* last max |G| */
+    int jacobian_evaluations;  /* fill calls (added in 0.1.2) */
+    int factorizations;        /* block factorizations */
+    int residual_evaluations;  /* residual-only calls (reuse) or FD total (newton_fd) */
 } bandsolver_newton_result;
 
 void bandsolver_f_default_options(bandsolver_newton_options *opts);
@@ -61,6 +67,14 @@ int bandsolver_f_solve(int n, int nj, const double *A, const double *B, const do
 int bandsolver_f_solve_kernel(int n, int nj, const double *A, const double *B, const double *D,
                               const double *G, const double *X, const double *Y, int pivot, int kernel,
                               double *dc, int *fail_node, double *min_rel_pivot);
+
+/* As bandsolver_f_newton, plus an optional residual-only callback (may be NULL; see
+ * bandsolver_residual_fn below) used by Jacobian-reuse iterations to skip building blocks. */
+int bandsolver_f_newton_ex(int n, int nj, bandsolver_fill_fn fill,
+                           int (*residual)(int n, int nj, const double *c, double *F, void *ctx),
+                           void *ctx, double *c, const bandsolver_newton_options *opts,
+                           bandsolver_newton_result *res, double *update_history, double *step_history,
+                           double *residual_history);
 
 /* c is updated in place. Histories (length >= max_iter) may be NULL. */
 int bandsolver_f_newton(int n, int nj, bandsolver_fill_fn fill, void *ctx, double *c,

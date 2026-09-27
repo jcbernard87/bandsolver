@@ -22,9 +22,6 @@ struct FdOptions {
     double typical = 1.0;                      // step floor scale for unknowns near zero
 };
 
-// Evaluate F(c) into F (n*nj values). May throw to signal failure.
-using ResidualFunction = std::function<void(const double* c, double* F)>;
-
 // Fill sys with the finite-difference blocks and G = -F(c). Returns the number of residual
 // evaluations (3n + 1). Exceptions from the residual propagate; invalid sizes/options throw
 // bandsolver::Error(invalid_argument).

@@ -58,6 +58,7 @@ module bandsolver_fd
         integer :: evaluations = 0
     contains
         procedure :: fill => fd_adapter_fill
+        procedure :: residual => fd_adapter_residual
     end type fd_adapter
 
     !> Residual F = -G taken from a user fill (for check_jacobian).
@@ -136,6 +137,18 @@ contains
         self%evaluations = self%evaluations + evals
         ierr = merge(0, 1, status == BAND_OK)
     end subroutine fd_adapter_fill
+
+    !> Residual-only evaluation for Jacobian-reuse iterations: one call instead of 3n+1.
+    subroutine fd_adapter_residual(self, n, nj, c, F, ierr)
+        class(fd_adapter), intent(inout) :: self
+        integer, intent(in) :: n, nj
+        real(dp), intent(in) :: c(n,nj)
+        real(dp), intent(out) :: F(n,nj)
+        integer, intent(out) :: ierr
+        call self%rp%residual(n, nj, c, F, ierr)
+        if (ierr /= 0) ierr = 1
+        self%evaluations = self%evaluations + 1
+    end subroutine fd_adapter_residual
 
     !> Newton iteration with finite-difference Jacobians; sets res%residual_evaluations.
     subroutine band_newton_fd(problem, n, nj, c, opts, res, fd_opts)

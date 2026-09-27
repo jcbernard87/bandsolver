@@ -54,3 +54,7 @@ add_test(NAME test_fd_cross COMMAND test_fd_cross)
 add_executable(test_factor_cpp cpp/test_factor.cpp)
 target_link_libraries(test_factor_cpp PRIVATE bandsolver_cpp)
 add_test(NAME test_factor_cpp COMMAND test_factor_cpp)
+
+add_executable(test_reuse_cpp cpp/test_reuse.cpp)
+target_link_libraries(test_reuse_cpp PRIVATE bandsolver_cpp)
+add_test(NAME test_reuse_cpp COMMAND test_reuse_cpp)
