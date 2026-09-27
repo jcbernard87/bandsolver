@@ -81,3 +81,13 @@ Spec: [`docs/specs/2026-09-26-band-library-design.md`](docs/specs/2026-09-26-ban
   - The stray tracked `build.log` was removed.
   - **Git history still contains `legacy/`** in earlier commits, so history must be rewritten or squashed before any push.
 - **2026-09-26 — Fresh repository (user chose option 2).** The development history (12 commits, including `legacy/`) was moved to a private backup at `../bandsolver-dev-history.git`, which can be inspected with `git --git-dir=../bandsolver-dev-history.git log`. `bandsolver/` was re-initialized on branch `main` with one commit of the current tree: 45 files, and no `legacy/` anywhere in its history. A clean clone configures without the oracle (legacy tests skipped), passes ctest 7/7, installs with isolated `pip install .`, and passes pytest 83/83. Still not pushed or published.
+
+## Feature loop: finite-difference Jacobians (branch `fd-jacobian`)
+Spec: [`docs/specs/2026-09-27-fd-jacobian-design.md`](docs/specs/2026-09-27-fd-jacobian-design.md). Same rules as above. Work on the branch and merge via a PR once CI is green.
+- [ ] F1 C++ core: `fd_jacobian`, `fd_fill`, `newton_fd`, `check_jacobian` + tests (analytic match incl. nj=3 X/Y, eval counts, planted-error detection, convergence).
+- [ ] F2 Fortran core + C ABI: `band_residual_problem`, `band_fd_jacobian`, `band_newton_fd`, `band_check_jacobian`, `bandsolver_f_fd_jacobian`, `bandsolver_f_newton_fd` + tests; cross-check against C++.
+- [ ] F3 Python: `fd_jacobian`, `newton_fd`, `check_jacobian` on both backends + pytest; FD example; docs (api, math, README, validation).
+- [ ] F4 Open a PR, wait for green CI and wheels on all platforms, merge; update the handoff.
+
+### Checkpoints
+- **2026-09-27 — F0.** The author approved the design; spec written; branch `fd-jacobian` created. Next: F1.
