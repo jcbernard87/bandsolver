@@ -3,7 +3,7 @@
 ## Origin
 
 - **Algorithm:** J. Newman's BAND method for coupled ordinary differential equations. It is published as Appendix C of J. Newman and K. E. Thomas-Alyea, *Electrochemical Systems*, 3rd ed. (Wiley-Interscience, 2004; ISBN 0-471-47756-7), Appendix C, printed pp. 611–622. The edition was confirmed by the author and matches the title and copyright pages of the supplied PDF. The book is © 2004 John Wiley & Sons, all rights reserved. Its §C.4 offers the Fortran 77 subroutines `BAND(J)` and `MATINV` for readers to call from their own programs, but grants no redistribution license. That appendix includes a Fortran listing of `BAND(J)` and `MATINV`. The method goes back to Newman's earlier work (Newman, *Ind. Eng. Chem. Fundam.* 7, 514 (1968)). **Verify the 1968 citation against the original before publication.**
-- **Archival implementation:** the author's PhD-era battery-model Fortran sources in `~/Desktop/Research` and related folders. Their shared `BAND`/`MATINV` text was inventoried and compared in `../../BAND_SOURCE_INVENTORY.md` and `../../NUMERICAL_SOLVER_AUDIT.md` (§8.18 compares it with Appendix C).
+- **Archival implementation:** the author's PhD-era battery-model Fortran sources, which are private. Their shared `BAND`/`MATINV` text was inventoried and compared with Appendix C in the author's private source audit.
 - **This library:** a new implementation (Fortran 2008, C++17 and Python). It has explicit interfaces, no global state, and status reporting. The elimination and the legacy pivot rule deliberately follow the operation order of the archival and Appendix C routines, so that historical results can be reproduced.
 
 ## Legacy test oracle (private, not distributed)
@@ -29,4 +29,4 @@ Facts recorded from the oracle, which contain no code:
 5. **Package name** on PyPI/conda: `bandsolver` has not been checked for availability.
 6. **Publication target**, for example JOSS or an electrochemistry-methods venue, and the scope of the accompanying paper. Stage 7 benchmarks and Track 2 model reproductions would support that paper.
 
-No push, upload, or package release has been made. Each requires explicit authorization (see `../../AGENT_INSTRUCTIONS.md`, Stage 8).
+Published on GitHub as version 0.1.0 on 2026-09-26, with the author's approval. It has not been uploaded to PyPI.

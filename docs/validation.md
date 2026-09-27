@@ -18,7 +18,7 @@ pytest
 python examples/<name>.py
 ```
 
-This report covers the generic linear kernel and the Newton driver. It does **not** validate any battery model from the archive. That work is Track 2 and remains gated by `../IMPLEMENTATION_PLAN.md`, Stages 0–4.
+This report covers the generic linear kernel and the Newton driver. It does **not** validate any battery model from the author's archive; that is separate work.
 
 ## 1. Linear kernel
 

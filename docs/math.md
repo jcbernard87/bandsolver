@@ -1,6 +1,6 @@
 # Mathematical formulation
 
-Reference: J. Newman and K. E. Thomas-Alyea, *Electrochemical Systems*, Appendix C ("Numerical Solution of Coupled, Ordinary Differential Equations"), §§C.1–C.4. The archival cross-check is in `../../NUMERICAL_SOLVER_AUDIT.md` §8.18.
+Reference: J. Newman and K. E. Thomas-Alyea, *Electrochemical Systems*, Appendix C ("Numerical Solution of Coupled, Ordinary Differential Equations"), §§C.1–C.4. The correspondence between that listing and the author's archival battery-model code was checked in the author's private source audit, which is not included here.
 
 ## Problem class
 

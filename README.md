@@ -83,7 +83,7 @@ BSD 3-Clause; see [LICENSE](LICENSE). If you use bandsolver in published work, p
 
 ## Status and limitations
 
-- Version 0.1.0 is a local development release. It has not been published.
+- Version 0.1.0 is the first public release; the source is on GitHub. It is not yet on PyPI.
 - The Python extension links the compiler's Fortran runtime (libgfortran) dynamically. Portable wheels have not been built.
 - Tested only on macOS arm64. The tests use tolerances rather than exact equality, so other toolchains should pass, but they have not been tried.
 - Time integration is left to user code (see `examples/transient_diffusion.py`). No adaptive step control or DAE integrator is included.
