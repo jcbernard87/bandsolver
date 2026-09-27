@@ -1,10 +1,27 @@
 {
   "title": "bandsolver: Newman's BAND block-tridiagonal solver in Fortran and C++ with Python bindings",
   "upload_type": "software",
-  "creators": [{ "name": "Bernard, John" }],
-  "license": "BSD-3-Clause",
-  "keywords": ["numerical methods", "block tridiagonal", "Newton method", "electrochemistry", "Fortran", "C++", "Python"],
+  "creators": [
+    {
+      "name": "Bernard, John"
+    }
+  ],
+  "license": "bsd-3-clause",
+  "keywords": [
+    "numerical methods",
+    "block tridiagonal",
+    "Newton method",
+    "electrochemistry",
+    "Fortran",
+    "C++",
+    "Python"
+  ],
   "related_identifiers": [
-    { "identifier": "10.1021/i160027a025", "relation": "references", "scheme": "doi" }
-  ]
+    {
+      "identifier": "10.1021/i160027a025",
+      "relation": "references",
+      "scheme": "doi"
+    }
+  ],
+  "description": "Standalone implementation of John Newman's BAND algorithm (Electrochemical Systems, 3rd ed., Appendix C) for coupled, nonlinear one-dimensional boundary-value and transient problems. It provides a block-tridiagonal solver with endpoint coupling blocks, a Newton driver, and finite-difference Jacobians, in Fortran 2008 (with a C ABI) and C++17, both accessible from Python."
 }
