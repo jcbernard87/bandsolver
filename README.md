@@ -112,7 +112,7 @@ BSD 3-Clause; see [LICENSE](LICENSE). If you use bandsolver in published work, p
 
 ## Status and limitations
 
-- Version 0.1.0 is the first public release; the source is on GitHub. It is not yet on PyPI.
+- The current release is 0.1.1 (see [CHANGELOG.md](CHANGELOG.md)); the source and prebuilt wheels are on GitHub. It is not yet on PyPI.
 - CI builds and tests on every push: Linux x86_64/aarch64 (gfortran 14), macOS arm64/x86_64 (gfortran 14 + Apple clang), and Windows x86_64 (Intel ifx 2025 + MSVC).
 - Time integration is left to user code (see `examples/transient_diffusion.py`). No adaptive step control or DAE integrator is included.
 

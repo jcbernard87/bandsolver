@@ -7,8 +7,8 @@ type: software
 authors:
   - given-names: John
     family-names: Bernard
-version: 0.1.0
-date-released: 2026-09-26
+version: 0.1.1
+date-released: 2026-09-27
 license: BSD-3-Clause
 repository-code: "https://github.com/jcbernard87/bandsolver"
 url: "https://github.com/jcbernard87/bandsolver"

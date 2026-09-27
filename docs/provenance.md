@@ -29,4 +29,4 @@ Facts recorded from the oracle, which contain no code:
 5. **PyPI:** deferred by the author (2026-09-26).
 6. **Publication target**, for example JOSS or an electrochemistry-methods venue, and the scope of the accompanying paper. Stage 7 benchmarks and Track 2 model reproductions would support that paper.
 
-Published on GitHub as version 0.1.0 on 2026-09-26, with the author's approval. It has not been uploaded to PyPI.
+Published on GitHub as version 0.1.0 on 2026-09-26, with the author's approval. Version 0.1.1 (2026-09-27) is the first release archived on Zenodo; the author enabled the integration. It has not been uploaded to PyPI.
