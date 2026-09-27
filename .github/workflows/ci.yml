@@ -53,5 +53,5 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           if [ "$RUNNER_OS" = macOS ]; then export CC=clang CXX=clang++; fi
-          python -m pip install . pytest
+          python -m pip install . pytest nbformat nbclient ipykernel matplotlib
           python -m pytest -q

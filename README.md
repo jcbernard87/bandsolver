@@ -83,6 +83,18 @@ More complete examples are in [examples/](examples): a nonlinear BVP, a coupled 
 
 See [CITATION.cff](CITATION.cff); GitHub's "Cite this repository" button uses it. Please also cite Newman's method: J. Newman, *Ind. Eng. Chem. Fundam.* 7, 514 (1968), and *Electrochemical Systems*, 3rd ed., Appendix C.
 
+## Tutorial notebooks
+
+Worked, fully explained examples live in [`notebooks/`](notebooks). Each one sets out the equations in LaTeX, derives the discretization, implements it, and validates it against an analytic solution:
+
+| Notebook | What it shows |
+|---|---|
+| [1 · Getting started](notebooks/01_getting_started.ipynb) | The BAND block structure; `solve`; a nonlinear BVP with a hand-written Jacobian and quadratic Newton convergence; `newton_fd`; how `check_jacobian` catches Jacobian bugs; second-order accuracy |
+| [2 · Binary electrolyte](notebooks/02_binary_electrolyte.ipynb) | **Coupled transient PDEs**: Nernst–Planck transport of concentration and potential under constant current, implicit Euler, validated against the analytic series solution and steady-state relations |
+| [3 · Porous electrode](notebooks/03_porous_electrode.ipynb) | The Newman–Tobias current distribution: solid and electrolyte potentials coupled by Butler–Volmer kinetics, solved from the residual alone, validated against the linear-kinetics analytic solution |
+
+To run them locally: `pip install bandsolver[notebooks]` (or `pip install jupyterlab matplotlib`), then `jupyter lab notebooks/`. CI re-executes every notebook.
+
 ## Documentation
 
 - [docs/math.md](docs/math.md): formulation, elimination algorithm, pivoting, and Newton convergence.
