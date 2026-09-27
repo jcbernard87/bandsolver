@@ -3,7 +3,6 @@ name: Wheels
 on:
   push:
     tags: ['v*']
-    branches: [ci]
   pull_request:
     paths: ['pyproject.toml', 'CMakeLists.txt', '**/CMakeLists.txt', '.github/workflows/wheels.yml', 'ci/**']
   workflow_dispatch:

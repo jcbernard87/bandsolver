@@ -38,6 +38,10 @@ test-command = "python -m pytest -q tests/python"
 [tool.cibuildwheel.linux]
 before-all = "sh ci/install_gfortran_manylinux.sh"
 
+[tool.cibuildwheel.macos]
+# Apple clang for C/C++ (no bundled libstdc++); gfortran only for Fortran.
+environment = { CC = "clang", CXX = "clang++" }
+
 [tool.cibuildwheel.windows]
 environment = { CMAKE_GENERATOR = "Ninja", CC = "cl", CXX = "cl", FC = "ifx" }
 repair-wheel-command = "python ci/repair_windows.py {dest_dir} {wheel}"
