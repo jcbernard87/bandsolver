@@ -1,5 +1,8 @@
 # bandsolver
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22997640.svg)](https://doi.org/10.5281/zenodo.22997640)
+[![CI](https://github.com/jcbernard87/bandsolver/actions/workflows/ci.yml/badge.svg)](https://github.com/jcbernard87/bandsolver/actions/workflows/ci.yml)
+
 A standalone implementation of John Newman's **BAND** algorithm for coupled, nonlinear one-dimensional boundary-value and transient problems. The algorithm is described in Appendix C of *Electrochemical Systems* (Newman & Thomas-Alyea). The library provides two interchangeable native cores and one Python interface:
 
 | Layer | Language | Entry points |
@@ -81,7 +84,7 @@ More complete examples are in [examples/](examples): a nonlinear BVP, a coupled 
 
 ## Citing
 
-See [CITATION.cff](CITATION.cff); GitHub's "Cite this repository" button uses it. Please also cite Newman's method: J. Newman, *Ind. Eng. Chem. Fundam.* 7, 514 (1968), and *Electrochemical Systems*, 3rd ed., Appendix C.
+See [CITATION.cff](CITATION.cff); GitHub's "Cite this repository" button uses it. Archived on Zenodo: [doi:10.5281/zenodo.22997640](https://doi.org/10.5281/zenodo.22997640), which resolves to the latest version. Version 0.1.1 is [doi:10.5281/zenodo.22997641](https://doi.org/10.5281/zenodo.22997641). Please also cite Newman's method: J. Newman, *Ind. Eng. Chem. Fundam.* 7, 514 (1968), and *Electrochemical Systems*, 3rd ed., Appendix C.
 
 ## Tutorial notebooks
 
