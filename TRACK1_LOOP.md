@@ -117,7 +117,7 @@ Spec: [`docs/specs/2026-09-27-fd-jacobian-design.md`](docs/specs/2026-09-27-fd-j
 
 ## Benchmark loop: solver comparison, layers 1–2 (branch `benchmarks`)
 Spec: [`docs/specs/2026-09-27-benchmarks-design.md`](docs/specs/2026-09-27-benchmarks-design.md). Work on the branch and merge via a PR. Benchmarks run locally; CI only smoke-tests the scripts.
-- [ ] B1 Harness: `benchmarks/` layout, pinned `requirements.txt`, `env.py`, native C++ timing harness + CMake option; smoke test.
+- [x] B1 Harness: `benchmarks/` layout, pinned `requirements.txt`, `env.py`, native C++ timing harness + CMake option; smoke test.
 - [ ] B2 Layer 1: `linear.py` (BAND py/native, LAPACK band, SuperLU, dense), backward-error check, sweep → `results/linear.csv`, plots.
 - [ ] B3 Layer 2 models: bandsolver BE/BDF2, IDA DAE (band), SciPy BDF reduced ODE; verify all agree on the same discrete solution.
 - [ ] B4 Layer 2 sweeps: work-precision + mesh scaling → `results/transient*.csv`, plots.
@@ -125,3 +125,4 @@ Spec: [`docs/specs/2026-09-27-benchmarks-design.md`](docs/specs/2026-09-27-bench
 
 ### Checkpoints
 - **2026-09-27 — B0.** Author approved layers 1–2 (PyBaMM deferred). scipy 1.18.1 and scikit-sundae 1.1.3 installed in `.venv`. The IDA API (band solver, algebraic_idx, calc_initcond, nfev/njev) was checked. Spec written. Next: B1.
+- **2026-09-27 — B1.** Added `benchmarks/`: `requirements.txt` (pins numpy 2.5.3, scipy 1.18.1, scikit-sundae 1.1.3, matplotlib 3.11.2), `env.py` (platform, CPU, compilers, versions, git commit to `results/env.json`), and `native_bench.cpp`. The native harness times the C++ and Fortran cores with no Python, taking the median of ≥5 repeats and ≥0.2 s per point; its CMake option `BANDSOLVER_BUILD_BENCHMARKS` is OFF by default, and a `--quick` smoke test is registered with CTest. Smoke run on an Apple M1 Pro: n=1, nj=25 takes 1.1 µs (C++) and 2.3 µs (Fortran); n=3, nj=50 takes 8.7 and 13.2 µs; backward error ≤ 1.5e-16. `benchmarks/results/` is excluded from the sdist. Next: B2.

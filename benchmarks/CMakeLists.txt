@@ -1,0 +1,6 @@
+add_executable(native_bench native_bench.cpp)
+target_link_libraries(native_bench PRIVATE bandsolver_cpp bandsolver_f)
+set_target_properties(native_bench PROPERTIES LINKER_LANGUAGE CXX)
+if(BANDSOLVER_BUILD_TESTS)
+  add_test(NAME benchmark_native_smoke COMMAND native_bench --quick)
+endif()
