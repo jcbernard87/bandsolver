@@ -24,7 +24,7 @@ Facts recorded from the oracle, which contain no code:
 
 1. **License — decided 2026-09-26: BSD-3-Clause** (`LICENSE`). It covers this repository's own code: the reimplementation, tests, examples and docs. The BAND algorithm itself is a published method and is cited, not licensed.
 2. **Shipping the legacy extract — decided 2026-09-26: not shipped.** See above. To publish it later would need permission from Wiley (permreq@wiley.com).
-3. **Before a public release**, confirm with Columbia (Columbia Technology Ventures) that neither university IP policy nor the funding agreements from the PhD work claim rights in derived software. Also decide whether the advisor or co-authors should be credited.
+3. **Institutional rights — resolved 2026-09-26 by the author.** Columbia is not involved in this library's development. The underlying algorithm is Newman's published method, and this implementation is the author's own work, so no institutional claim applies. The author approved public release.
 4. **Attribution and citation text**, and whether to add `CITATION.cff` or a Zenodo DOI at release.
 5. **Package name** on PyPI/conda: `bandsolver` has not been checked for availability.
 6. **Publication target**, for example JOSS or an electrochemistry-methods venue, and the scope of the accompanying paper. Stage 7 benchmarks and Track 2 model reproductions would support that paper.
