@@ -92,6 +92,7 @@ Worked, fully explained examples live in [`notebooks/`](notebooks). Each one set
 | [1 · Getting started](notebooks/01_getting_started.ipynb) | The BAND block structure; `solve`; a nonlinear BVP with a hand-written Jacobian and quadratic Newton convergence; `newton_fd`; how `check_jacobian` catches Jacobian bugs; second-order accuracy |
 | [2 · Binary electrolyte](notebooks/02_binary_electrolyte.ipynb) | **Coupled transient PDEs**: Nernst–Planck transport of concentration and potential under constant current, implicit Euler, validated against the analytic series solution and steady-state relations |
 | [3 · Porous electrode](notebooks/03_porous_electrode.ipynb) | The Newman–Tobias current distribution: solid and electrolyte potentials coupled by Butler–Volmer kinetics, solved from the residual alone, validated against the linear-kinetics analytic solution |
+| [4 · Finite differences vs finite volumes](notebooks/04_fd_vs_fv.ipynb) | The same electrode/separator diffusion problem discretized both ways, with the same solver. Nodal FD converges to the wrong answer (+8 % salt); FD with interface matching is first order; FV is second order and conserves exactly. Also covers a graded mesh, when FD is fine, and a decision guide |
 
 To run them locally: `pip install bandsolver[notebooks]` (or `pip install jupyterlab matplotlib`), then `jupyter lab notebooks/`. CI re-executes every notebook.
 
