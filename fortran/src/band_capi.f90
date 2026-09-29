@@ -114,6 +114,19 @@ contains
         real(c_double), intent(out) :: dc(*)
         integer(c_int), intent(out) :: fail_node
         real(c_double), intent(out) :: min_rel_pivot
+        status = bandsolver_f_solve_ex(n, nj, A, B, D, G, X, Y, pivot, kernel, int(SINGULAR_RELATIVE, c_int), &
+                                       dc, fail_node, min_rel_pivot)
+    end function bandsolver_f_solve_kernel
+
+    !> Solve with every option: pivot, kernel and singular (SINGULAR_RELATIVE or SINGULAR_EXACT).
+    integer(c_int) function bandsolver_f_solve_ex(n, nj, A, B, D, G, X, Y, pivot, kernel, singular, dc, &
+            fail_node, min_rel_pivot) bind(c, name='bandsolver_f_solve_ex') result(status)
+        integer(c_int), value :: n, nj, pivot, kernel, singular
+        real(c_double), intent(in) :: A(*), B(*), D(*), G(*)
+        type(c_ptr), value :: X, Y
+        real(c_double), intent(out) :: dc(*)
+        integer(c_int), intent(out) :: fail_node
+        real(c_double), intent(out) :: min_rel_pivot
         real(c_double), allocatable :: Af(:,:,:), Bf(:,:,:), Df(:,:,:)
         real(c_double), pointer :: Xp(:,:), Yp(:,:)
         real(c_double), allocatable :: dcf(:,:)
@@ -139,10 +152,11 @@ contains
         end if
         allocate(dcf(n,nj))
         call band_solve(n, nj, Af, Bf, Df, reshape(G(1:n*nj), [n, nj]), dcf, status, &
-                        X=Xf, Y=Yf, pivot=pivot, fail_node=fnode, min_rel_pivot=min_rel_pivot, kernel=kernel)
+                        X=Xf, Y=Yf, pivot=pivot, fail_node=fnode, min_rel_pivot=min_rel_pivot, kernel=kernel, &
+                        singular=singular)
         dc(1:n*nj) = reshape(dcf, [n*nj])
         fail_node = fnode
-    end function bandsolver_f_solve_kernel
+    end function bandsolver_f_solve_ex
 
     subroutine c_problem_fill(self, n, nj, c, A, B, D, G, X, Y, ierr)
         class(c_problem), intent(inout) :: self

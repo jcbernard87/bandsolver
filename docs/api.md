@@ -15,6 +15,8 @@
 
 **Pivot modes:** `0 partial` (default), `1 legacy`. See [math.md](math.md).
 
+**Singular-block rule** (`solve` only, added in 0.1.2): `0 relative` (default; a pivot ≤ n·ε·max|block| is singular) or `1 exact` (only an exactly zero pivot, as in the archival `MATINV`). It is available in Fortran as `band_solve(..., singular=SINGULAR_EXACT)`, in C as `bandsolver_f_solve_ex`, in C++ as `solve(view, dc, pivot, Singular::exact)`, and in Python as `singular="exact"`. `factor`, `newton` and `integrate` always use the relative rule.
+
 **Fortran kernel** (Fortran backend only): `0 fast` (default; column-major loops) or `1 reference` (archival loop order). With gfortran the two give bit-identical results; other compilers agree to rounding. `reference` exists for comparison and benchmarking. The option is available in Fortran as `band_solve(..., kernel=)` and `newton_options%kernel`, in C as `bandsolver_f_solve_kernel` and `bandsolver_newton_options.kernel`, and in Python as `kernel="fast"|"reference"`.
 
 **Fill contract (Newton):** at state `c`, set `G = −F(c)` and the Jacobian blocks. Output arrays arrive zeroed, so only nonzero entries need to be written.
@@ -24,7 +26,7 @@
 ```fortran
 use bandsolver_kernel   ! band_solve, block_solve, BAND_* status and PIVOT_* constants
 call band_solve(n, nj, A, B, D, G, dc, status [, X=X] [, Y=Y] [, pivot=PIVOT_PARTIAL] &
-                [, fail_node=node] [, min_rel_pivot=r])
+                [, fail_node=node] [, min_rel_pivot=r] [, kernel=KERNEL_FAST] [, singular=SINGULAR_RELATIVE])
 
 use bandsolver_newton   ! band_problem, newton_options, newton_result, band_newton
 type, extends(band_problem) :: my_problem
@@ -47,6 +49,10 @@ A nonzero `ierr` from `fill` stops the iteration with `BAND_CALLBACK_ERROR`. The
 int bandsolver_f_solve(int n, int nj, const double *A, const double *B, const double *D,
                        const double *G, const double *X, const double *Y, int pivot,
                        double *dc, int *fail_node, double *min_rel_pivot);
+/* every option: pivot, kernel (enum bandsolver_kernel), singular (enum bandsolver_singular) */
+int bandsolver_f_solve_ex(int n, int nj, const double *A, const double *B, const double *D,
+                          const double *G, const double *X, const double *Y, int pivot, int kernel,
+                          int singular, double *dc, int *fail_node, double *min_rel_pivot);
 
 typedef int (*bandsolver_fill_fn)(int n, int nj, const double *c, double *A, double *B,
                                   double *D, double *G, double *X, double *Y, void *ctx);
@@ -64,6 +70,7 @@ History arrays (length ≥ `max_iter`) may be `NULL`. The fill callback returns 
 #include <bandsolver/band.hpp>
 bandsolver::SystemView v{n, nj, A, B, D, G, X /*nullable*/, Y /*nullable*/};
 bandsolver::SolveInfo info = bandsolver::solve(v, dc, bandsolver::Pivot::partial);
+// or solve(v, dc, bandsolver::Pivot::legacy, bandsolver::Singular::exact)
 //   info.status, info.fail_node (0-based or -1), info.min_rel_pivot
 
 bandsolver::BlockSystem sys(n, nj);           // owning, zeroed; sys.A(j,i,k), sys.G(j,i), sys.X(i,k) ...
@@ -160,7 +167,8 @@ Here `residual_fn` has the signature `int (*)(int n, int nj, const double* c, do
 ## Python (`bandsolver`)
 
 ```python
-bandsolver.solve(A, B, D, G, X=None, Y=None, *, pivot="partial", backend="cpp") -> ndarray (nj, n)
+bandsolver.solve(A, B, D, G, X=None, Y=None, *, pivot="partial", backend="cpp", kernel="fast",
+                 singular="relative") -> ndarray (nj, n)
 
 bandsolver.newton(fill, c0, *, rtol=1e-10, atol=1e-12, damping=1.0, max_iter=50,
                   pivot="partial", require_convergence=True, backend="cpp") -> NewtonResult

@@ -50,6 +50,30 @@ def test_singular_block_reports_node(rng, backend, pivot, node):
     assert e.value.node == node
 
 
+def _near_singular(rng):
+    """Node 0 decoupled with B_0 = [1, 1/2; 2, 1 + 2^-52]: every elimination product is exact."""
+    A, B, D, G, _, _ = random_system(rng, 2, 6, False)
+    D[0] = 0
+    A[1] = 0
+    B[0] = [[1.0, 0.5], [2.0, 1.0 + np.finfo(float).eps]]
+    return A, B, D, G
+
+
+@pytest.mark.parametrize("pivot", ["partial", "legacy"])
+def test_singular_rule(rng, backend, pivot):
+    A, B, D, G = _near_singular(rng)
+    with pytest.raises(bs.SingularBlockError) as e:
+        bs.solve(A, B, D, G, pivot=pivot, backend=backend)
+    assert e.value.node == 0
+    dc = bs.solve(A, B, D, G, pivot=pivot, backend=backend, singular="exact")
+    np.testing.assert_allclose(B[0] @ dc[0], G[0], rtol=0, atol=1e-12 * np.abs(dc[0]).max())
+    other = "fortran" if backend == "cpp" else "cpp"
+    assert np.array_equal(dc, bs.solve(A, B, D, G, pivot=pivot, backend=other, singular="exact"))
+    B[0, 1] = 2 * B[0, 0]
+    with pytest.raises(bs.SingularBlockError):
+        bs.solve(A, B, D, G, pivot=pivot, backend=backend, singular="exact")
+
+
 def test_non_finite(rng, backend):
     A, B, D, G, _, _ = random_system(rng, 2, 5, False)
     G[2, 1] = np.nan
@@ -71,6 +95,8 @@ def test_argument_validation(rng):
         bs.solve(A, B, D, G, backend="julia")
     with pytest.raises(ValueError, match="pivot"):
         bs.solve(A, B, D, G, pivot="full")
+    with pytest.raises(ValueError, match="singular"):
+        bs.solve(A, B, D, G, singular="loose")
 
 
 @pytest.mark.parametrize("xy", [False, True])

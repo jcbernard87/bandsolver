@@ -75,6 +75,11 @@ int main(void) {
     check(st == BANDSOLVER_SINGULAR && fail_node == 6, "C-ABI singular block reports 1-based node 6");
     st = bandsolver_f_solve(n, 2, A, B, D, G, NULL, NULL, 0, dc, &fail_node, &mrp);
     check(st == BANDSOLVER_INVALID_ARGUMENT, "C-ABI rejects nj < 3");
+    st = bandsolver_f_solve_ex(n, nj, A, B, D, G, NULL, NULL, BANDSOLVER_PIVOT_LEGACY, BANDSOLVER_KERNEL_FAST,
+                               BANDSOLVER_SINGULAR_EXACT, dc, &fail_node, &mrp);
+    check(st == BANDSOLVER_SINGULAR && fail_node == 6, "C-ABI exact singular rule still reports a zero block");
+    st = bandsolver_f_solve_ex(n, nj, A, B, D, G, NULL, NULL, 0, 0, 3, dc, &fail_node, &mrp);
+    check(st == BANDSOLVER_INVALID_ARGUMENT, "C-ABI rejects an unknown singular rule");
 
     const int m = 51;
     double c[51] = {0}, hist_u[50], hist_s[50], hist_r[50];

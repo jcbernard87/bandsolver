@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.1.2 — 2026-09-28
+
+### Added (reproduction of archival results)
+- **`singular` option for `solve`** (Fortran `band_solve(..., singular=)`, C `bandsolver_f_solve_ex`, C++ `solve(view, dc, pivot, Singular)`, Python `singular="relative"|"exact"`). The default `relative` keeps the n·ε·max|block| threshold. `exact` treats only an exactly zero pivot as singular, as the archival `MATINV` did. With `pivot="legacy"` it reproduces archival runs that pass through nearly singular blocks, which the relative rule stops. Existing signatures and the C structs are unchanged.
+- Docs: bit-exact reproduction of an archival program needs bandsolver built without FMA contraction (`-ffp-contract=off`); the "0 ulp" validation claim now states the build condition it was measured under.
 
 ### Changed
 - Layer 1 benchmark figures refreshed from the rerun made with the Fortran fast kernel: BAND is 1.6–3.9× faster than banded LAPACK (was quoted as up to 5.8×) and 2.3–8.8× faster than SuperLU (was up to 12×). Medians are unchanged within noise.

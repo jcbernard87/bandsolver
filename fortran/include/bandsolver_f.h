@@ -22,6 +22,10 @@ enum bandsolver_status {
 
 enum bandsolver_pivot { BANDSOLVER_PIVOT_PARTIAL = 0, BANDSOLVER_PIVOT_LEGACY = 1 };
 
+/* When a pivot block counts as singular: RELATIVE (default) when |pivot| <= n*eps*max|block|;
+ * EXACT only for an exactly zero pivot, as in the archival MATINV (added in 0.1.2). */
+enum bandsolver_singular { BANDSOLVER_SINGULAR_RELATIVE = 0, BANDSOLVER_SINGULAR_EXACT = 1 };
+
 /* Fortran loop organisation: FAST (default, column-major loops) and REFERENCE (archival
  * row-wise loops) give bit-identical results; REFERENCE exists for comparison/benchmarks. */
 enum bandsolver_kernel { BANDSOLVER_KERNEL_FAST = 0, BANDSOLVER_KERNEL_REFERENCE = 1 };
@@ -67,6 +71,11 @@ int bandsolver_f_solve(int n, int nj, const double *A, const double *B, const do
 int bandsolver_f_solve_kernel(int n, int nj, const double *A, const double *B, const double *D,
                               const double *G, const double *X, const double *Y, int pivot, int kernel,
                               double *dc, int *fail_node, double *min_rel_pivot);
+
+/* As bandsolver_f_solve_kernel, with the singular-block rule (enum bandsolver_singular). */
+int bandsolver_f_solve_ex(int n, int nj, const double *A, const double *B, const double *D,
+                          const double *G, const double *X, const double *Y, int pivot, int kernel,
+                          int singular, double *dc, int *fail_node, double *min_rel_pivot);
 
 /* As bandsolver_f_newton, plus an optional residual-only callback (may be NULL; see
  * bandsolver_residual_fn below) used by Jacobian-reuse iterations to skip building blocks. */

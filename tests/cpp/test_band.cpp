@@ -111,6 +111,32 @@ int main() {
             check(info.status == Status::ok && backward_error(s, dc) < 1e-14, "zero-diagonal blocks solve");
         }
     }
+    // Nearly singular node-0 block (pivot 2^-52 relative), decoupled so every elimination
+    // product is exact: the relative rule stops, the exact rule divides by the tiny pivot.
+    for (Pivot p : {Pivot::partial, Pivot::legacy}) {
+        BlockSystem s = random_system(2, 6, false);
+        std::fill(s.X().begin(), s.X().end(), 0.0);
+        std::fill(s.Y().begin(), s.Y().end(), 0.0);
+        for (int i = 0; i < 2; ++i)
+            for (int k = 0; k < 2; ++k) s.D(0, i, k) = s.A(1, i, k) = 0;
+        s.B(0, 0, 0) = 1; s.B(0, 0, 1) = 0.5; s.B(0, 1, 0) = 2; s.B(0, 1, 1) = 1 + 2.220446049250313e-16;
+        std::vector<double> dc(12);
+        SolveInfo info = solve(s.view(), dc.data(), p);
+        check(info.status == Status::singular && info.fail_node == 0, "nearly singular block: relative rule reports it");
+        info = solve(s.view(), dc.data(), p, Singular::exact);
+        check(info.status == Status::ok && backward_error(s, dc) < 1e-13, "nearly singular block: exact rule solves");
+        std::vector<double> df(12);
+        int fnode; double mrp;
+        int st = bandsolver_f_solve_ex(2, 6, s.A().data(), s.B().data(), s.D().data(), s.G().data(), nullptr, nullptr,
+                                       static_cast<int>(p), 0, 1, df.data(), &fnode, &mrp);
+        check(st == 0 && df == dc, "nearly singular block: C++ and Fortran exact rule bit-identical");
+        s.B(0, 1, 1) = 1;
+        check(solve(s.view(), dc.data(), p, Singular::exact).status == Status::singular,
+              "exactly singular block: exact rule reports it");
+        check(solve(s.view(), dc.data(), p, static_cast<Singular>(5)).status == Status::invalid_argument,
+              "unknown singular rule rejected");
+    }
+
     {
         BlockSystem s = random_system(2, 5, false);
         s.G(1, 0) = std::nan("");

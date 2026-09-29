@@ -50,9 +50,9 @@ bool all_finite(const double* p, std::size_t count) {
 }
 
 // Solve Bm * S = R in place; Bm is n x n, R is n x m, both row-major. Pivots with
-// |p| <= n*eps*max|Bm| are reported singular (the archival MATINV only stops on zero).
-Status solve_partial(int n, int m, double* Bm, double* R, double& rel) {
-    const double eps = std::numeric_limits<double>::epsilon();
+// |p| <= tol*max|Bm| are reported singular: tol = n*eps (Singular::relative), or 0
+// (Singular::exact, as the archival MATINV, which only stops on zero).
+Status solve_partial(int n, int m, double* Bm, double* R, double& rel, double tol) {
     double bscale = 0;
     for (int i = 0; i < n * n; ++i) bscale = std::max(bscale, std::abs(Bm[i]));
     rel = std::numeric_limits<double>::max();
@@ -61,7 +61,7 @@ Status solve_partial(int n, int m, double* Bm, double* R, double& rel) {
         int p = k;
         for (int i = k + 1; i < n; ++i)
             if (std::abs(Bm[i * n + k]) > std::abs(Bm[p * n + k])) p = i;
-        if (std::abs(Bm[p * n + k]) <= n * eps * bscale) return Status::singular;
+        if (std::abs(Bm[p * n + k]) <= tol * bscale) return Status::singular;
         rel = std::min(rel, std::abs(Bm[p * n + k]) / bscale);
         if (p != k) {
             std::swap_ranges(Bm + p * n, Bm + p * n + n, Bm + k * n);
@@ -82,8 +82,7 @@ Status solve_partial(int n, int m, double* Bm, double* R, double& rel) {
 }
 
 // Archival MATINV pivot heuristic (Appendix C.4), operation order preserved.
-Status solve_legacy(int n, int m, double* Bm, double* R, double& rel) {
-    const double eps = std::numeric_limits<double>::epsilon();
+Status solve_legacy(int n, int m, double* Bm, double* R, double& rel, double tol) {
     const double bmax0 = static_cast<double>(1.1f);  // default-real literal in the source
     double bscale = 0;
     for (int i = 0; i < n * n; ++i) bscale = std::max(bscale, std::abs(Bm[i]));
@@ -118,7 +117,7 @@ Status solve_legacy(int n, int m, double* Bm, double* R, double& rel) {
             std::swap_ranges(Bm + irow * n, Bm + irow * n + n, Bm + jcol * n);
             std::swap_ranges(R + irow * m, R + irow * m + m, R + jcol * m);
         }
-        if (std::abs(Bm[jcol * n + jcol]) <= n * eps * bscale) return Status::singular;
+        if (std::abs(Bm[jcol * n + jcol]) <= tol * bscale) return Status::singular;
         rel = std::min(rel, std::abs(Bm[jcol * n + jcol]) / bscale);
         double f = 1.0 / Bm[jcol * n + jcol];
         for (int j = 0; j < n; ++j) Bm[jcol * n + j] *= f;
@@ -136,10 +135,15 @@ Status solve_legacy(int n, int m, double* Bm, double* R, double& rel) {
 }  // namespace
 
 SolveInfo solve(const SystemView& s, double* dc, Pivot pivot) {
+    return solve(s, dc, pivot, Singular::relative);
+}
+
+SolveInfo solve(const SystemView& s, double* dc, Pivot pivot, Singular singular) {
     SolveInfo info;
     const int n = s.n, nj = s.nj;
     if (n < 1 || nj < 3 || !s.A || !s.B || !s.D || !s.G || !dc ||
-        (pivot != Pivot::partial && pivot != Pivot::legacy)) {
+        (pivot != Pivot::partial && pivot != Pivot::legacy) ||
+        (singular != Singular::relative && singular != Singular::exact)) {
         info.status = Status::invalid_argument;
         return info;
     }
@@ -161,11 +165,12 @@ SolveInfo solve(const SystemView& s, double* dc, Pivot pivot) {
         if (s.X) std::copy(s.X, s.X + nn, Xp.begin());
         if (s.Y) std::copy(s.Y, s.Y + nn, Yw.begin());
         double rel = 0;
+        const double tol = singular == Singular::exact ? 0.0 : n * std::numeric_limits<double>::epsilon();
         info.min_rel_pivot = std::numeric_limits<double>::max();
 
         auto block_solve = [&](int m, int node) {
-            const Status st = pivot == Pivot::legacy ? solve_legacy(n, m, Bm.data(), R.data(), rel)
-                                                     : solve_partial(n, m, Bm.data(), R.data(), rel);
+            const Status st = pivot == Pivot::legacy ? solve_legacy(n, m, Bm.data(), R.data(), rel, tol)
+                                                     : solve_partial(n, m, Bm.data(), R.data(), rel, tol);
             if (st != Status::ok) {
                 info.status = st;
                 info.fail_node = node;
@@ -262,8 +267,12 @@ SolveInfo solve(const SystemView& s, double* dc, Pivot pivot) {
 }
 
 std::vector<double> solve(const BlockSystem& sys, Pivot pivot) {
+    return solve(sys, pivot, Singular::relative);
+}
+
+std::vector<double> solve(const BlockSystem& sys, Pivot pivot, Singular singular) {
     std::vector<double> dc(static_cast<std::size_t>(sys.n()) * sys.nj());
-    const SolveInfo info = solve(sys.view(), dc.data(), pivot);
+    const SolveInfo info = solve(sys.view(), dc.data(), pivot, singular);
     if (info.status != Status::ok) {
         std::string msg = std::string("bandsolver::solve: ") + to_string(info.status);
         if (info.fail_node >= 0) msg += " at node " + std::to_string(info.fail_node);

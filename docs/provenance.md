@@ -17,7 +17,7 @@ Facts recorded from the oracle, which contain no code:
 | Archive source | `Research/Modelling/MnO2/Old Work/ZnMn02_v8.f95`, SHA-256 `8abba38490cc8feefd282841b441a9c77d4f49677a6c90fda76a13a702cc191a` |
 | Extract | lines 1983–2100 (`MATINV` 1983–2037, `BAND` 2041–2100), SHA-256 `99eb0fb89443aba84debb2329d1478c48036239df85860268288a1f564b4ef8f` |
 | Normalized routine hashes | `MATINV` `3194efd4…48f8a3`, `BAND` `e8e1ce3a…958b8c`; both match the archive inventory |
-| Library agreement | `pivot="legacy"` matches bit for bit (0 ulp); `pivot="partial"` differs by ≤ 9.6e-16 relative (see `validation.md`) |
+| Library agreement | `pivot="legacy"` matches bit for bit (0 ulp) when built with the same compiler flags as the oracle, and with `singular="exact"` also on nearly singular blocks; `pivot="partial"` differs by ≤ 9.6e-16 relative (see `validation.md`) |
 | Archival defect | with nj = 3 and both X and Y nonzero, the result is wrong (backward error ≈ 3e-3); see `math.md` |
 
 ## Decisions for the author (not made by the implementer)

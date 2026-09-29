@@ -39,7 +39,7 @@ const double* opt_ptr(const std::optional<Arr>& a, py::ssize_t expected, const c
 
 py::tuple solve(int n, int nj, const Arr& A, const Arr& B, const Arr& D, const Arr& G,
                 const std::optional<Arr>& X, const std::optional<Arr>& Y, int pivot, const std::string& backend,
-                int kernel) {
+                int kernel, int singular) {
     if (n < 1 || nj < 3) throw std::invalid_argument("require n >= 1 and nj >= 3");
     const py::ssize_t nb = static_cast<py::ssize_t>(n) * n * nj, nv = static_cast<py::ssize_t>(n) * nj;
     require_size(A, nb, "A"); require_size(B, nb, "B"); require_size(D, nb, "D"); require_size(G, nv, "G");
@@ -53,7 +53,8 @@ py::tuple solve(int n, int nj, const Arr& A, const Arr& B, const Arr& D, const A
         bandsolver::SolveInfo info;
         {
             py::gil_scoped_release release;
-            info = bandsolver::solve(v, dc.mutable_data(), static_cast<bandsolver::Pivot>(pivot));
+            info = bandsolver::solve(v, dc.mutable_data(), static_cast<bandsolver::Pivot>(pivot),
+                                     static_cast<bandsolver::Singular>(singular));
         }
         status = static_cast<int>(info.status);
         fail_node = info.fail_node;
@@ -61,8 +62,8 @@ py::tuple solve(int n, int nj, const Arr& A, const Arr& B, const Arr& D, const A
     } else if (backend == "fortran") {
         {
             py::gil_scoped_release release;
-            status = bandsolver_f_solve_kernel(n, nj, A.data(), B.data(), D.data(), G.data(), xp, yp, pivot, kernel,
-                                               dc.mutable_data(), &fail_node, &min_rel_pivot);
+            status = bandsolver_f_solve_ex(n, nj, A.data(), B.data(), D.data(), G.data(), xp, yp, pivot, kernel,
+                                           singular, dc.mutable_data(), &fail_node, &min_rel_pivot);
         }
         fail_node = fail_node > 0 ? fail_node - 1 : -1;  // 1-based -> 0-based
     } else {
@@ -514,7 +515,8 @@ private:
 PYBIND11_MODULE(_core, m) {
     m.doc() = "Native backends for bandsolver (C++ core and Fortran library via C ABI).";
     m.def("solve", &solve, py::arg("n"), py::arg("nj"), py::arg("A"), py::arg("B"), py::arg("D"), py::arg("G"),
-          py::arg("X"), py::arg("Y"), py::arg("pivot"), py::arg("backend"), py::arg("kernel") = 0);
+          py::arg("X"), py::arg("Y"), py::arg("pivot"), py::arg("backend"), py::arg("kernel") = 0,
+          py::arg("singular") = 0);
     m.def("newton", &newton, py::arg("n"), py::arg("nj"), py::arg("fill"), py::arg("c0"), py::arg("rtol"),
           py::arg("atol"), py::arg("damping"), py::arg("max_iter"), py::arg("pivot"), py::arg("require_convergence"),
           py::arg("backend"), py::arg("kernel") = 0, py::arg("jacobian_reuse") = false,
