@@ -73,6 +73,25 @@ program test_kernel
         call dealloc()
     end do
 
+    ! Nearly singular node-1 block (pivot 2^-52 relative): SINGULAR_RELATIVE stops,
+    ! SINGULAR_EXACT divides by the tiny pivot as the archival MATINV does.
+    do piv = PIVOT_PARTIAL, PIVOT_LEGACY
+        call alloc(2, 6)
+        call random_system(2, 6, A, B, D, G, X, Y, .false.)
+        call near_singular_node1()
+        call band_solve(2, 6, A, B, D, G, dc, status, pivot=piv, fail_node=fnode)
+        call check(status == BAND_SINGULAR .and. fnode == 1, 'nearly singular block: relative rule reports it')
+        call band_solve(2, 6, A, B, D, G, dc, status, pivot=piv, fail_node=fnode, singular=SINGULAR_EXACT)
+        call check(status == BAND_OK .and. fnode == 0, 'nearly singular block: exact rule solves')
+        call check(maxval(abs(matmul(B(:,:,1), dc(:,1)) - G(:,1))) <= 1.d-12*maxval(abs(dc(:,1))), &
+            'nearly singular block: exact rule satisfies node 1')
+        call check(backward_error(2, 6, A, B, D, G, X, Y, dc) < 1.d-13, 'nearly singular block: backward error')
+        B(2,:,1) = 2*B(1,:,1)
+        call band_solve(2, 6, A, B, D, G, dc, status, pivot=piv, fail_node=fnode, singular=SINGULAR_EXACT)
+        call check(status == BAND_SINGULAR .and. fnode == 1, 'exactly singular block: exact rule reports it')
+        call dealloc()
+    end do
+
     ! Non-finite input and invalid sizes.
     call alloc(2, 5)
     call random_system(2, 5, A, B, D, G, X, Y, .false.)
@@ -88,6 +107,8 @@ program test_kernel
     call random_system(2, 5, A, B, D, G, X, Y, .false.)
     call band_solve(2, 5, A, B, D, G, dc, status, pivot=7)
     call check(status == BAND_INVALID_ARGUMENT, 'unknown pivot rejected')
+    call band_solve(2, 5, A, B, D, G, dc, status, singular=7)
+    call check(status == BAND_INVALID_ARGUMENT, 'unknown singular rule rejected')
     call dealloc()
 
     if (n_failures > 0) error stop 1
@@ -96,6 +117,13 @@ contains
         integer, intent(in) :: n, nj
         allocate(A(n,n,nj), B(n,n,nj), D(n,n,nj), G(n,nj), X(n,n), Y(n,n), dc(n,nj), dref(n,nj))
     end subroutine alloc
+    !> Node 1 decoupled (D_1 = 0, A_2 = 0, no X/Y) with B_1 = [1, 1/2; 2, 1 + 2^-52]: every
+    !> elimination product is exact, so the result does not depend on FMA contraction.
+    subroutine near_singular_node1()
+        X = 0; Y = 0
+        D(:,:,1) = 0; A(:,:,2) = 0
+        B(:,:,1) = reshape([1.d0, 2.d0, 0.5d0, 1.d0 + epsilon(1.d0)], [2, 2])
+    end subroutine near_singular_node1
     subroutine dealloc()
         deallocate(A, B, D, G, X, Y, dc, dref)
     end subroutine dealloc

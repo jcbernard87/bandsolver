@@ -116,7 +116,7 @@ For whole transient simulations, fixed-step BDF2 on BAND is the fastest option d
 
 ## Relationship to the historical code
 
-The kernel reimplements the `BAND`/`MATINV` routines used in the author's PhD battery-model Fortran sources, which follow Appendix C. With `pivot="legacy"` it reproduces a frozen, byte-exact copy of the archival kernel **bit for bit** on the test platform. That copy is kept privately as a test oracle and is not distributed, because the archival routines closely follow the copyrighted textbook listing. The default `pivot="partial"` uses standard row partial pivoting. Two deliberate fixes are documented in [docs/math.md](docs/math.md#differences-from-the-archival-kernel): a singular-block threshold, and a correct 3-node X+Y case.
+The kernel reimplements the `BAND`/`MATINV` routines used in the author's PhD battery-model Fortran sources, which follow Appendix C. With `pivot="legacy"` it reproduces a frozen, byte-exact copy of the archival kernel **bit for bit** on the test platform. That copy is kept privately as a test oracle and is not distributed, because the archival routines closely follow the copyrighted textbook listing. The default `pivot="partial"` uses standard row partial pivoting. Two deliberate fixes are documented in [docs/math.md](docs/math.md#differences-from-the-archival-kernel): a singular-block threshold (`singular="exact"` restores the archival rule), and a correct 3-node X+Y case. Bit-for-bit reproduction of an archival program also needs bandsolver built without FMA contraction; see [docs/math.md](docs/math.md#block-solve-and-pivoting).
 
 ## License
 
@@ -124,7 +124,7 @@ BSD 3-Clause; see [LICENSE](LICENSE). If you use bandsolver in published work, p
 
 ## Status and limitations
 
-- The current release is 0.1.1 (see [CHANGELOG.md](CHANGELOG.md)); the source and prebuilt wheels are on GitHub. It is not yet on PyPI.
+- The current release is 0.1.2 (see [CHANGELOG.md](CHANGELOG.md)); the source and prebuilt wheels are on GitHub. It is not yet on PyPI.
 - CI builds and tests on every push: Linux x86_64/aarch64 (gfortran 14), macOS arm64/x86_64 (gfortran 14 + Apple clang), and Windows x86_64 (Intel ifx 2025 + MSVC).
 - Time integration is left to user code (see `examples/transient_diffusion.py`). No adaptive step control or DAE integrator is included.
 

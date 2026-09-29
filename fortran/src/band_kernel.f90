@@ -23,6 +23,13 @@ module bandsolver_kernel
     integer, parameter, public :: PIVOT_PARTIAL = 0  !< row partial pivoting (default)
     integer, parameter, public :: PIVOT_LEGACY = 1   !< archival MATINV pivot heuristic
 
+    !> When a pivot block counts as singular.
+    !> RELATIVE (default): a chosen pivot with |pivot| <= n*epsilon*max|block|.
+    !> EXACT: only an exactly zero pivot (no nonzero entry left), as in the archival MATINV.
+    !> EXACT with PIVOT_LEGACY reproduces the archival kernel on nearly singular blocks too.
+    integer, parameter, public :: SINGULAR_RELATIVE = 0
+    integer, parameter, public :: SINGULAR_EXACT = 1
+
     !> Loop organisation of the partial-pivot path. Both give bit-identical results (every
     !> matrix entry accumulates over the same index in the same order); FAST runs the inner
     !> loops down columns (contiguous in Fortran), REFERENCE keeps the archival row-wise loops.
@@ -40,7 +47,7 @@ contains
     !> Solve the Appendix C block system. Inputs are not modified.
     !> status: BAND_OK, BAND_SINGULAR (fail_node set), BAND_NON_FINITE, BAND_INVALID_ARGUMENT.
     !> min_rel_pivot: smallest |pivot| / max|block entry| over all node factorizations.
-    subroutine band_solve(n, nj, A, B, D, G, dc, status, X, Y, pivot, fail_node, min_rel_pivot, kernel)
+    subroutine band_solve(n, nj, A, B, D, G, dc, status, X, Y, pivot, fail_node, min_rel_pivot, kernel, singular)
         integer, intent(in) :: n, nj
         real(dp), intent(in) :: A(n,n,nj), B(n,n,nj), D(n,n,nj), G(n,nj)
         real(dp), intent(out) :: dc(n,nj)
@@ -50,11 +57,12 @@ contains
         integer, intent(out), optional :: fail_node
         real(dp), intent(out), optional :: min_rel_pivot
         integer, intent(in), optional :: kernel
+        integer, intent(in), optional :: singular
 
         real(dp), allocatable :: E(:,:,:), R(:,:)
         real(dp) :: Xp(n,n), Yw(n,n), Am(n,n), Bm(n,n), Gm(n), rel
-        integer :: piv, j, i, k, l, m, np1, kern
-        logical :: fast
+        integer :: piv, j, i, k, l, m, np1, kern, sing
+        logical :: fast, exact
 
         if (present(fail_node)) fail_node = 0
         if (present(min_rel_pivot)) min_rel_pivot = huge(1.0_dp)
@@ -62,9 +70,12 @@ contains
         if (present(pivot)) piv = pivot
         kern = KERNEL_FAST
         if (present(kernel)) kern = kernel
+        sing = SINGULAR_RELATIVE
+        if (present(singular)) sing = singular
         ! Validate before touching dc: with invalid sizes its extent is not trustworthy.
         if (n < 1 .or. nj < 3 .or. (piv /= PIVOT_PARTIAL .and. piv /= PIVOT_LEGACY) &
-            .or. (kern /= KERNEL_FAST .and. kern /= KERNEL_REFERENCE)) then
+            .or. (kern /= KERNEL_FAST .and. kern /= KERNEL_REFERENCE) &
+            .or. (sing /= SINGULAR_RELATIVE .and. sing /= SINGULAR_EXACT)) then
             status = BAND_INVALID_ARGUMENT
             return
         end if
@@ -80,6 +91,7 @@ contains
 
         np1 = n + 1
         fast = kern == KERNEL_FAST .and. piv == PIVOT_PARTIAL .and. n >= FAST_MIN_N
+        exact = sing == SINGULAR_EXACT
         allocate(E(n,np1,nj), R(n,2*n+1))
 
         ! Node 1: B_1 [S_D | S_X | s_G] = [D_1 | X | G_1]
@@ -87,7 +99,7 @@ contains
         R(:,1:n) = D(:,:,1)
         R(:,n+1:2*n) = Xp
         R(:,2*n+1) = G(:,1)
-        call block_solve(n, 2*n+1, Bm, R, piv, status, rel, fast)
+        call block_solve(n, 2*n+1, Bm, R, piv, status, rel, fast, exact)
         if (.not. node_ok(1)) return
         E(:,np1,1) = R(:,2*n+1)
         E(:,1:n,1) = -R(:,1:n)
@@ -177,7 +189,7 @@ contains
                     end do
                 end do
             end if
-            call block_solve(n, np1, Bm, R(:,1:np1), piv, status, rel, fast)
+            call block_solve(n, np1, Bm, R(:,1:np1), piv, status, rel, fast, exact)
             if (.not. node_ok(j)) return
             E(:,:,j) = -R(:,1:np1)
         end do
@@ -230,22 +242,28 @@ contains
     !> with m right-hand sides. status = BAND_SINGULAR when a chosen pivot satisfies
     !> |pivot| <= n*epsilon*max|Bm| (numerically rank deficient). The archival MATINV has
     !> no such threshold; results are identical whenever the threshold is not triggered.
+    !> With exact = .true. only an exactly zero pivot counts (SINGULAR_EXACT).
     !> rel = min |pivot| / max|Bm| (1 for a perfectly scaled diagonal block).
-    subroutine block_solve(n, m, Bm, R, pivot, status, rel, fast)
+    subroutine block_solve(n, m, Bm, R, pivot, status, rel, fast, exact)
         integer, intent(in) :: n, m, pivot
         real(dp), intent(inout) :: Bm(n,n), R(n,m)
         integer, intent(out) :: status
         real(dp), intent(out) :: rel
-        logical, intent(in), optional :: fast
+        logical, intent(in), optional :: fast, exact
         logical :: use_fast
+        real(dp) :: tol
         use_fast = .false.
         if (present(fast)) use_fast = fast
+        tol = n*epsilon(1.0_dp)
+        if (present(exact)) then
+            if (exact) tol = 0
+        end if
         if (pivot == PIVOT_LEGACY) then
-            call solve_legacy(n, m, Bm, R, status, rel)
+            call solve_legacy(n, m, Bm, R, status, rel, tol)
         else if (use_fast) then
-            call solve_partial_columns(n, m, Bm, R, status, rel)
+            call solve_partial_columns(n, m, Bm, R, status, rel, tol)
         else
-            call solve_partial(n, m, Bm, R, status, rel)
+            call solve_partial(n, m, Bm, R, status, rel, tol)
         end if
     end subroutine block_solve
 
@@ -274,11 +292,12 @@ contains
     end function pivot_row
 
     !> Gauss-Jordan elimination with row partial pivoting.
-    subroutine solve_partial(n, m, Bm, R, status, rel)
+    subroutine solve_partial(n, m, Bm, R, status, rel, tol)
         integer, intent(in) :: n, m
         real(dp), intent(inout) :: Bm(n,n), R(n,m)
         integer, intent(out) :: status
         real(dp), intent(out) :: rel
+        real(dp), intent(in) :: tol     !< singular when |pivot| <= tol*max|Bm|
         real(dp) :: bscale, f, rowB(n), rowR(m)
         integer :: k, p, i
 
@@ -288,7 +307,7 @@ contains
         if (bscale == 0) return
         do k = 1, n
             p = pivot_row(n, Bm, k)
-            if (abs(Bm(p,k)) <= n*epsilon(1.0_dp)*bscale) return
+            if (abs(Bm(p,k)) <= tol*bscale) return
             rel = min(rel, abs(Bm(p,k))/bscale)
             if (p /= k) then
                 rowB = Bm(k,:); Bm(k,:) = Bm(p,:); Bm(p,:) = rowB
@@ -312,11 +331,12 @@ contains
     !> column k are captured first, then every column is updated as one contiguous vector
     !> operation. Each entry receives the same single update per pivot step, so results are
     !> bit-identical to solve_partial.
-    subroutine solve_partial_columns(n, m, Bm, R, status, rel)
+    subroutine solve_partial_columns(n, m, Bm, R, status, rel, tol)
         integer, intent(in) :: n, m
         real(dp), intent(inout) :: Bm(n,n), R(n,m)
         integer, intent(out) :: status
         real(dp), intent(out) :: rel
+        real(dp), intent(in) :: tol
         real(dp) :: bscale, f, mult(n), rowB(n), rowR(m)
         integer :: k, p, c
 
@@ -326,7 +346,7 @@ contains
         if (bscale == 0) return
         do k = 1, n
             p = pivot_row(n, Bm, k)
-            if (abs(Bm(p,k)) <= n*epsilon(1.0_dp)*bscale) return
+            if (abs(Bm(p,k)) <= tol*bscale) return
             rel = min(rel, abs(Bm(p,k))/bscale)
             if (p /= k) then
                 rowB = Bm(k,:); Bm(k,:) = Bm(p,:); Bm(p,:) = rowB
@@ -352,13 +372,14 @@ contains
     !> smallest bnext/btry ratio, swap that row into the pivot column's position, and
     !> Gauss-Jordan eliminate. Operation order is kept for bitwise agreement.
     !> Differences: reports BAND_SINGULAR (instead of printing DETERM=0 and continuing)
-    !> when no nonzero entry remains among unused rows/columns or the pivot is below
-    !> the relative threshold documented in block_solve.
-    subroutine solve_legacy(n, m, Bm, R, status, rel)
+    !> when no nonzero entry remains among unused rows/columns or, unless tol = 0
+    !> (SINGULAR_EXACT), the pivot is below the relative threshold documented in block_solve.
+    subroutine solve_legacy(n, m, Bm, R, status, rel, tol)
         integer, intent(in) :: n, m
         real(dp), intent(inout) :: Bm(n,n), R(n,m)
         integer, intent(out) :: status
         real(dp), intent(out) :: rel
+        real(dp), intent(in) :: tol
         ! 1.1 is a default-real literal in the archival source; keep its exact value.
         real(dp), parameter :: bmax0 = real(1.1, dp)
         logical :: used(n), found
@@ -402,7 +423,7 @@ contains
                     save = R(irow,k); R(irow,k) = R(jcol,k); R(jcol,k) = save
                 end do
             end if
-            if (abs(Bm(jcol,jcol)) <= n*epsilon(1.0_dp)*bscale) return
+            if (abs(Bm(jcol,jcol)) <= tol*bscale) return
             rel = min(rel, abs(Bm(jcol,jcol))/bscale)
             f = 1.0_dp/Bm(jcol,jcol)
             do j = 1, n

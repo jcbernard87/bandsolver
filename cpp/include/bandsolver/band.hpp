@@ -29,6 +29,13 @@ enum class Pivot : int {
     legacy = 1,   // archival MATINV pivot heuristic, for historical comparison
 };
 
+// When a pivot block counts as singular.
+enum class Singular : int {
+    relative = 0,  // |pivot| <= n*eps*max|block| (default)
+    exact = 1,     // only an exactly zero pivot, as in the archival MATINV; with Pivot::legacy
+                   // this reproduces the archival kernel on nearly singular blocks too
+};
+
 const char* to_string(Status s) noexcept;
 
 // Thrown by the throwing convenience APIs; carries the status and failing node (or -1).
@@ -64,6 +71,7 @@ struct SolveInfo {
 // Solve K dc = G. dc must hold n*nj values. Inputs are not modified. Errors are reported
 // through SolveInfo::status; only std::bad_alloc (workspace allocation) can propagate.
 SolveInfo solve(const SystemView& sys, double* dc, Pivot pivot = Pivot::partial);
+SolveInfo solve(const SystemView& sys, double* dc, Pivot pivot, Singular singular);
 
 // Owning, zero-initialized storage for one system, with element accessors.
 class BlockSystem {
@@ -100,6 +108,7 @@ private:
 
 // Throwing convenience: returns dc (size n*nj) or throws bandsolver::Error.
 std::vector<double> solve(const BlockSystem& sys, Pivot pivot = Pivot::partial);
+std::vector<double> solve(const BlockSystem& sys, Pivot pivot, Singular singular);
 
 }  // namespace bandsolver
 

@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "bandsolver"
-version = "0.1.1"
+version = "0.1.2"
 description = "Newman BAND block-tridiagonal solver with C++ and Fortran backends"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -20,7 +20,7 @@ notebooks = ["jupyterlab", "matplotlib"]
 [tool.scikit-build]
 wheel.packages = ["python/bandsolver"]
 # Never ship the private archival oracle, even if a copy is placed inside the tree.
-sdist.exclude = ["legacy/", "bandsolver-legacy-oracle/", "build*/", ".venv/", "TRACK1_LOOP.md", "*.log", "dist/", ".github/", "ci/", "benchmarks/results/"]
+sdist.exclude = ["legacy/", "bandsolver-legacy-oracle/", "build*/", ".venv/", "*.log", "dist/", ".github/", "ci/", "benchmarks/results/"]
 cmake.build-type = "Release"
 
 [tool.scikit-build.cmake.define]

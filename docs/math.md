@@ -66,14 +66,16 @@ Here `rowscale` is the largest Jacobian entry of that equation row. Forward-diff
 - **`partial` (default).** Gauss–Jordan elimination with row partial pivoting on each block.
 - **`legacy`.** The Appendix C `MATINV` pivot rule. For each unused row, it finds the largest and second-largest magnitudes among the unused columns. It pivots on the row whose second/first ratio is smallest, and moves that row into the pivot column's position. Operation order follows the archival source, so results agree bit for bit with it on the test platform. This mode exists for historical comparison, not because it is more accurate.
 
-In both modes, a block is **singular** if a chosen pivot satisfies `|p| ≤ n·ε·max|block|`.
+In both modes, a block is **singular** by default if a chosen pivot satisfies `|p| ≤ n·ε·max|block|` (`singular="relative"`). With `singular="exact"` (added in 0.1.2), only an exactly zero pivot counts, as in the archival `MATINV`: a nearly singular block is then solved with its tiny pivot, however inaccurate the result. Use `exact` only to reproduce archival results; together with `pivot="legacy"` it matches the archival kernel on nearly singular blocks too.
+
+**Bit-exact reproduction and FMA.** Bit-level agreement with the archival kernel needs the same floating-point contraction on both sides. The archival programs were built without optimization, so without fused multiply-add (FMA). An optimized build of bandsolver may contract `a*b + c` into an FMA (GCC and Clang do by default on arm64 and on x86-64 with FMA), and the results then differ in the last bits, which a long time integration can amplify. To reproduce an archival run bit for bit, build bandsolver with `-ffp-contract=off` (GCC, Clang) or `-fp-model=precise` (Intel), for example `CMAKE_ARGS="-DCMAKE_Fortran_FLAGS=-ffp-contract=off -DCMAKE_CXX_FLAGS=-ffp-contract=off -DCMAKE_C_FLAGS=-ffp-contract=off" pip install .`, and use `pivot="legacy", singular="exact"`.
 
 ## Differences from the archival kernel
 
 | Behaviour | Archival `BAND`/`MATINV` | bandsolver |
 |---|---|---|
 | Singular block | Prints `DETERM=0 AT J=` and continues with an undefined result | Returns status `SINGULAR` with the node index |
-| Rank-deficient block after rounding | Not detected (exact-zero test only) | Detected by the relative pivot threshold |
+| Rank-deficient block after rounding | Not detected (exact-zero test only) | Detected by the relative pivot threshold (default), or not detected with `singular="exact"` |
 | `nj = 3` with nonzero X and Y | Drops node 0's `X` term when eliminating `Y`, giving a wrong answer (backward error ≈ 3e-3) | Correct |
 | Inputs | Overwrites module-global A, B, D, G, X | Inputs unchanged; no global state |
 | NaN/Inf | Propagates silently | Status `NON_FINITE` |

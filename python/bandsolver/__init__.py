@@ -22,7 +22,7 @@ import numpy as np
 
 from . import _core
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 __all__ = [
     "BACKENDS",
@@ -153,6 +153,16 @@ def _pivot_code(pivot: str) -> int:
         raise ValueError(f"pivot must be one of {tuple(_PIVOTS)}, got {pivot!r}") from None
 
 
+_SINGULAR_RULES = {"relative": 0, "exact": 1}
+
+
+def _singular_code(singular: str) -> int:
+    try:
+        return _SINGULAR_RULES[singular]
+    except KeyError:
+        raise ValueError(f"singular must be one of {tuple(_SINGULAR_RULES)}, got {singular!r}") from None
+
+
 def _kernel_code(kernel: str) -> int:
     try:
         return _KERNELS[kernel]
@@ -168,12 +178,17 @@ def _as_blocks(a, name: str, shape=None) -> np.ndarray:
 
 
 def solve(A, B, D, G, X=None, Y=None, *, pivot: str = "partial", backend: str = "cpp",
-          kernel: str = "fast") -> np.ndarray:
+          kernel: str = "fast", singular: str = "relative") -> np.ndarray:
     """Solve the block system and return ``dc`` with shape ``(nj, n)``.
 
     ``kernel`` selects the Fortran loop organisation (``"fast"`` column-major, default, or
     ``"reference"`` archival loops); both give bit-identical results. It only affects the
     ``"fortran"`` backend.
+
+    ``singular`` sets when a pivot block counts as singular: ``"relative"`` (default) when a
+    pivot is at most n·eps·max|block|, ``"exact"`` only when it is exactly zero, as in the
+    archival MATINV. ``pivot="legacy", singular="exact"`` reproduces the archival kernel
+    even on nearly singular blocks, where it divides by a tiny pivot instead of stopping.
 
     Raises :class:`SingularBlockError`, :class:`NonFiniteError` or ``ValueError``.
     """
@@ -189,7 +204,8 @@ def solve(A, B, D, G, X=None, Y=None, *, pivot: str = "partial", backend: str = 
     G = _as_blocks(G, "G", (nj, n))
     X = None if X is None else _as_blocks(X, "X", (n, n))
     Y = None if Y is None else _as_blocks(Y, "Y", (n, n))
-    dc, status, node, _ = _core.solve(n, nj, A, B, D, G, X, Y, _pivot_code(pivot), backend, _kernel_code(kernel))
+    dc, status, node, _ = _core.solve(n, nj, A, B, D, G, X, Y, _pivot_code(pivot), backend, _kernel_code(kernel),
+                                      _singular_code(singular))
     _raise_for(status, node, "solve")
     return dc
 

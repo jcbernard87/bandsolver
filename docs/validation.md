@@ -25,7 +25,8 @@ This report covers the generic linear kernel and the Newton driver. It does **no
 | Check | Result |
 |---|---|
 | Backward error ‖KΔc−G‖∞ / (‖K‖∞‖Δc‖∞+‖G‖∞) on random block systems: n ∈ {1,2,5,12}, nj ∈ {3,4,50,500}, with and without X/Y | max 4.0e-16 (Fortran, partial pivot), 3.9e-16 (Fortran, legacy pivot), 5.0e-16 (C++, both modes). Pass threshold 1e-13. |
-| Legacy pivot mode vs the frozen archival `BAND`/`MATINV` (private byte-exact extract, not distributed; see `provenance.md`) | **Bit-identical, 0 ulp**, on every case except the one below. |
+| Legacy pivot mode vs the frozen archival `BAND`/`MATINV` (private byte-exact extract, not distributed; see `provenance.md`) | **Bit-identical, 0 ulp**, on every case except the one below, with the oracle and the library built by the same compiler with the same flags. Against an archival program built differently (for example without FMA contraction, as the originals were), bit-identity also needs bandsolver built with `-ffp-contract=off`; see [math.md](math.md#block-solve-and-pivoting). |
+| Legacy pivot with `singular="exact"` on a nearly singular block (pivot 2⁻⁵² relative) vs the archival kernel | **Bit-identical**; the default relative rule reports `SINGULAR` instead. Fortran, C, C++ and Python; C++ and Fortran agree bit for bit. |
 | Partial pivot mode vs the archival kernel | ≤ 9.6e-16 relative. |
 | C++ core vs Fortran library, same inputs | **Bit-identical, 0 ulp**, in both pivot modes. Tests allow 64 ε for other toolchains. |
 | Both backends vs numpy dense `solve` of an independently assembled K (Python), n ≤ 6, nj ≤ 200 | ≤ 1e-12 relative; backward error < 1e-14. |
@@ -35,7 +36,7 @@ This report covers the generic linear kernel and the Newton driver. It does **no
 
 **Difference from the archival kernel (a fix, not a regression):** with `nj = 3` and both X and Y nonzero, the archival kernel omits node 1's `X` term when it eliminates `Y`. Its backward error is then 2.9e-3, which the test suite records. The library handles this case (backward error ≤ 5e-16).
 
-**Second deliberate difference:** a pivot with |p| ≤ n·ε·max|block| is reported as singular. The archival kernel only stops on an exact zero, which misses rank-deficient blocks after rounding.
+**Second deliberate difference:** by default a pivot with |p| ≤ n·ε·max|block| is reported as singular. The archival kernel only stops on an exact zero, which misses rank-deficient blocks after rounding. `singular="exact"` restores the archival rule for reproduction work.
 
 ## 2. Newton driver
 
