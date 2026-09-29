@@ -1,7 +1,7 @@
 # bandsolver — standalone Newman BAND library: design spec
 
-**Date:** 2026-09-26 · **Status:** draft, approved to proceed under the Track 1 loop; open for user correction.
-**Track:** 1 (generic solver library). Track 2 (battery-model audit, `../IMPLEMENTATION_PLAN.md` Stages 0–4) continues separately and does **not** gate this library.
+**Date:** 2026-09-26 · **Status:** implemented in v0.1.x.
+**Scope:** the generic solver library. A separate audit of the battery models that use BAND continues independently and does **not** gate this library.
 
 ## 1. Intent (what the user said vs. assumptions)
 
@@ -29,7 +29,7 @@ j = 1:        B_1 Δc_1 + D_1 Δc_2 + X Δc_3                 = G_1
 j = nj:       Y Δc_{nj-2} + A_nj Δc_{nj-1} + B_nj Δc_nj     = G_nj
 ```
 
-This convention was derived from `BAND(J)` in `Research/Modelling/MnO2/Old Work/ZnMn02_v8.f95` lines 2041–2100 (file SHA-256 `8abba384…c191a`, matches `BAND_SOURCE_INVENTORY.md`) and matches Appendix C eqs C.10–C.15 per audit §8.18. `A_1`, `D_nj` are unused. For Newton use, `G = −F(c)` (negative residual) and the update is `c ← c + λ Δc`.
+This convention was derived from the archival `BAND(J)` routine (see [provenance.md](../provenance.md)) and matches Appendix C eqs C.10–C.15. `A_1`, `D_nj` are unused. For Newton use, `G = −F(c)` (negative residual) and the update is `c ← c + λ Δc`.
 
 Algorithm (forward elimination, back substitution): at each node solve the small dense block system with multiple right-hand sides, storing `E_j` (n×n) and `e_j` (n) such that `Δc_j = E_j Δc_{j+1} + e_j` (plus the `X` correction at node 1). Cost O(nj·n³), storage O(nj·n²).
 
@@ -43,7 +43,7 @@ bandsolver/
   cpp/include/bandsolver/  band.hpp, newton.hpp, status.hpp
   cpp/src/         band.cpp, newton.cpp
   python/bandsolver/  __init__.py (solve, newton, backends), _core (pybind11 ext linking both cores)
-  (../bandsolver-legacy-oracle/, private, outside the repo) frozen archival kernel + oracle wrapper; tests only
+  (private, outside the repo) frozen archival kernel + oracle wrapper, used by tests only; see docs/provenance.md
   tests/fortran, tests/cpp, tests/python
   examples/        transient diffusion (implicit Euler via newton), nonlinear BVP, X/Y boundary closure
   docs/            math formulation, API reference, validation report, provenance
