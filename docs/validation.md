@@ -137,7 +137,7 @@ The Fortran backend is probably slower because its C interface transposes the bl
 | Platform | Compilers |
 |---|---|
 | Linux x86_64 and aarch64 (ubuntu-24.04) | gfortran 14 |
-| macOS arm64 (macos-14) and x86_64 (macos-15-intel) | gfortran 14, Apple clang |
+| macOS arm64 (macos-15) and x86_64 (macos-15-intel) | gfortran 14, Apple clang |
 | Windows x86_64 (windows-2025) | Intel ifx 2025.3, MSVC |
 
 `.github/workflows/wheels.yml` uses cibuildwheel to build wheels for CPython 3.9–3.15, including the free-threaded builds, on the same five platforms. Each wheel has its Fortran runtime bundled in (auditwheel, delocate or delvewheel), and the full pytest suite runs against the installed wheel. On a `v*` tag, the wheels and sdist are attached to the GitHub release.
