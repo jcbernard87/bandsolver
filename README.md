@@ -97,6 +97,7 @@ Worked, fully explained examples live in [`notebooks/`](notebooks). Each one set
 | [3 · Porous electrode](notebooks/03_porous_electrode.ipynb) | The Newman–Tobias current distribution: solid and electrolyte potentials coupled by Butler–Volmer kinetics, solved from the residual alone, validated against the linear-kinetics analytic solution |
 | [4 · Finite differences vs finite volumes](notebooks/04_fd_vs_fv.ipynb) | The same electrode/separator diffusion problem discretized both ways, with the same solver. Nodal FD converges to the wrong answer (+8 % salt); FD with interface matching is first order; FV is second order and conserves exactly. Also covers a graded mesh, when FD is fine, and a decision guide |
 | [5 · Benchmarks](notebooks/05_benchmarks.ipynb) | Summary of the solver comparison (reads the saved results): BAND vs LAPACK banded, SuperLU and dense solves; fixed-step BAND vs adaptive SUNDIALS IDA and SciPy BDF on a coupled DAE |
+| [6 · Surface pH during GITT](notebooks/06_gitt_surface_ph.ipynb) | **Switched boundary flux with `bs.integrate`**: H⁺ diffusion across a boundary layer during GITT pulses, integrated segment by segment, validated against the exact Fourier/superposition solution (second order in space, error following rtol to the spatial floor, √t and steady limits); why the rest needed for a clean reading scales with δ²/D |
 
 To run them locally: `pip install bandsolver[notebooks]` (or `pip install jupyterlab matplotlib`), then `jupyter lab notebooks/`. CI re-executes every notebook.
 
