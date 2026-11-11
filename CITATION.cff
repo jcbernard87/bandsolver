@@ -16,6 +16,12 @@ identifiers:
     value: 10.5281/zenodo.22997640
     description: Concept DOI (all versions; resolves to the latest)
   - type: doi
+    value: 10.5281/zenodo.24124499
+    description: Version 0.1.3
+  - type: doi
+    value: 10.5281/zenodo.23038746
+    description: Version 0.1.2
+  - type: doi
     value: 10.5281/zenodo.22997641
     description: Version 0.1.1
 repository-code: "https://github.com/jcbernard87/bandsolver"

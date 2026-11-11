@@ -84,7 +84,7 @@ More complete examples are in [examples/](examples): a nonlinear BVP, a coupled 
 
 ## Citing
 
-See [CITATION.cff](CITATION.cff); GitHub's "Cite this repository" button uses it. Archived on Zenodo: [doi:10.5281/zenodo.22997640](https://doi.org/10.5281/zenodo.22997640), which resolves to the latest version. Version 0.1.1 is [doi:10.5281/zenodo.22997641](https://doi.org/10.5281/zenodo.22997641). Please also cite Newman's method: J. Newman, *Ind. Eng. Chem. Fundam.* 7, 514 (1968), and *Electrochemical Systems*, 3rd ed., Appendix C.
+See [CITATION.cff](CITATION.cff); GitHub's "Cite this repository" button uses it. Archived on Zenodo: [doi:10.5281/zenodo.22997640](https://doi.org/10.5281/zenodo.22997640), which resolves to the latest version. Version DOIs: 0.1.3 [doi:10.5281/zenodo.24124499](https://doi.org/10.5281/zenodo.24124499), 0.1.2 [doi:10.5281/zenodo.23038746](https://doi.org/10.5281/zenodo.23038746), 0.1.1 [doi:10.5281/zenodo.22997641](https://doi.org/10.5281/zenodo.22997641). Please also cite Newman's method: J. Newman, *Ind. Eng. Chem. Fundam.* 7, 514 (1968), and *Electrochemical Systems*, 3rd ed., Appendix C.
 
 ## Tutorial notebooks
 
