@@ -22,7 +22,7 @@ import numpy as np
 
 from . import _core
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 __all__ = [
     "BACKENDS",

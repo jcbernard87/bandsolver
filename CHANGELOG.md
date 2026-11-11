@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.3 — 2026-11-10
 
 ### Added
 - **Notebook 6 · Surface pH during GITT:** H⁺ diffusion across a boundary layer with a switched surface flux, integrated with `bs.integrate` one pulse segment at a time and validated against the exact Fourier/superposition solution (second-order convergence, rtol convergence to the spatial floor, short- and long-time limits). Its validation results are asserted, so CI catches regressions.
