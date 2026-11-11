@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **macOS wheels need macOS 15 or newer** (was 14 for arm64). GitHub retires its macOS 14 runners on 2 November 2026; on macOS 15 runners the bundled gfortran runtime (libgfortran, libquadmath) requires macOS 15. On macOS 14, install from the sdist (needs gfortran); released 0.1.2 wheels are unaffected.
+- **Fortran core, small blocks:** the partial-pivot block solve uses explicit scalar loops instead of row sections and swap temporaries. For n = 1–3 the Fortran core was 1.3–2.2× slower than C++; called from Fortran it is now within 1.11–1.13×, and through the C ABI within 1.26–1.37×. Results are bit-identical (same operations in the same order; checked against the previous kernel on 960 random systems, and by the existing kernel and legacy tests). Larger blocks are unchanged.
+
 ## 0.1.2 — 2026-09-28
 
 ### Added (reproduction of archival results)

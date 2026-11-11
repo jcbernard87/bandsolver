@@ -80,16 +80,17 @@ The option is `kernel="fast"` (default) or `kernel="reference"` (Fortran backend
 
 | n | reference / fast (Fortran core, native) | Fortran fast / C++, via C ABI | Fortran fast / C++, core called from Fortran |
 |---|---|---|---|
-| 1 | 1.00 | 2.2 | 2.2 |
-| 3 | 1.00 | 1.5 | 1.3 |
-| 5 | 1.10 | 1.06 | 0.96 |
-| 10 | 1.17–1.22 | 1.34 | 1.14 |
-| 20 | 0.99–1.02 | 1.26–1.34 | 1.08 |
-| 30 | 1.36–1.38 | 1.12–1.22 | 0.98 |
+| 1 | 1.00 | 1.26–1.37 | 1.12 |
+| 2 | – | – | 1.11 |
+| 3 | 0.97–0.99 | 1.29 | 1.13 |
+| 5 | 1.03–1.05 | 1.03–1.04 | 0.96 |
+| 10 | 1.17–1.21 | 1.33–1.37 | 1.14 |
+| 20 | 1.03–1.04 | 1.23–1.27 | 1.08 |
+| 30 | 1.34–1.44 | 1.09–1.12 | 0.98 |
 
 The first two columns come from `results/linear.csv` (nj = 100 and 2000); the last is a direct Fortran timing at nj = 2000.
 - **Where Fortran now stands:** for n ≥ 5, the Fortran core is at parity with C++ when called from Fortran. Through the C ABI it's within 1.06–1.34×; the extra cost comes from the ABI's block transposes.
-- **Remaining gap:** for n ≤ 3, a fixed per-node overhead keeps Fortran 1.3–2.2× slower than C++. This is recorded as a follow-up; a specialised scalar/2×2 path is the likely fix.
+- **Small blocks:** up to 0.1.2, a fixed per-node overhead kept Fortran 1.3–2.2× slower than C++ for n ≤ 3. It came from the small-block solve's row-section operations and its row-swap temporaries, which gfortran does not reduce to plain loops at such small sizes. That solve now uses explicit scalar loops, with the same operations in the same order, so the results are bit-identical. Called from Fortran, the core is now within 1.11–1.13× of C++ for n = 1–3. Through the C ABI the gap is 1.26–1.37×, most of it the ABI's block transposes.
 
 ## Layer 2: a nonlinear transient simulation
 

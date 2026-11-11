@@ -298,8 +298,8 @@ contains
         integer, intent(out) :: status
         real(dp), intent(out) :: rel
         real(dp), intent(in) :: tol     !< singular when |pivot| <= tol*max|Bm|
-        real(dp) :: bscale, f, rowB(n), rowR(m)
-        integer :: k, p, i
+        real(dp) :: bscale, f, s
+        integer :: k, p, i, c
 
         bscale = max_abs(n, Bm)
         rel = huge(1.0_dp)
@@ -310,18 +310,30 @@ contains
             if (abs(Bm(p,k)) <= tol*bscale) return
             rel = min(rel, abs(Bm(p,k))/bscale)
             if (p /= k) then
-                rowB = Bm(k,:); Bm(k,:) = Bm(p,:); Bm(p,:) = rowB
-                rowR = R(k,:);  R(k,:) = R(p,:);   R(p,:) = rowR
+                do c = 1, n
+                    s = Bm(k,c); Bm(k,c) = Bm(p,c); Bm(p,c) = s
+                end do
+                do c = 1, m
+                    s = R(k,c); R(k,c) = R(p,c); R(p,c) = s
+                end do
             end if
             f = 1.0_dp/Bm(k,k)
-            Bm(k,k:n) = Bm(k,k:n)*f
-            R(k,:) = R(k,:)*f
+            do c = k, n
+                Bm(k,c) = Bm(k,c)*f
+            end do
+            do c = 1, m
+                R(k,c) = R(k,c)*f
+            end do
             do i = 1, n
                 if (i == k) cycle
                 f = Bm(i,k)
                 if (f == 0) cycle
-                Bm(i,k:n) = Bm(i,k:n) - f*Bm(k,k:n)
-                R(i,:) = R(i,:) - f*R(k,:)
+                do c = k, n
+                    Bm(i,c) = Bm(i,c) - f*Bm(k,c)
+                end do
+                do c = 1, m
+                    R(i,c) = R(i,c) - f*R(k,c)
+                end do
             end do
         end do
         status = BAND_OK
